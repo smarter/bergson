@@ -275,8 +275,10 @@ def main():
         print(f"Generated pile-100 in {data_str}")
 
     # Save config
-    with open(os.path.join(test_path, "index_config.json"), "w") as f:
+    config_path = os.path.join(test_path, "index_config.json")
+    with open(config_path, "w") as f:
         json.dump(asdict(cfg), f, indent=4)
+    task.upload_artifact(name="config", artifact_object=config_path)
 
     # Setup
     workers = 8
@@ -400,11 +402,20 @@ def main():
         else:
             gradient_covariances = gradient_covariances + gradient_covariances_rank
 
-    save_file(activation_covariances.to_dict(), os.path.join(covariance_test_path, "activation_covariance.safetensors"))
-    save_file(gradient_covariances.to_dict(), os.path.join(covariance_test_path, "gradient_covariance.safetensors"))
-    with open(os.path.join(covariance_test_path, "stats.json"), "w") as f:
+    activation_cov_path = os.path.join(covariance_test_path, "activation_covariance.safetensors")
+    gradient_cov_path = os.path.join(covariance_test_path, "gradient_covariance.safetensors")
+    cov_stats_path = os.path.join(covariance_test_path, "stats.json")
+
+    save_file(activation_covariances.to_dict(), activation_cov_path)
+    save_file(gradient_covariances.to_dict(), gradient_cov_path)
+    with open(cov_stats_path, "w") as f:
         json.dump({"total_processed_global": total_processed_global}, f, indent=4)
         print(f"Global processed {total_processed_global} tokens.")
+
+    # Upload covariance artifacts to ClearML
+    task.upload_artifact(name="activation_covariances", artifact_object=activation_cov_path)
+    task.upload_artifact(name="gradient_covariances", artifact_object=gradient_cov_path)
+    task.upload_artifact(name="covariance_stats", artifact_object=cov_stats_path)
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -438,8 +449,15 @@ def main():
         eigenvectors_activations[name] = eigenvectors_a.to(dtype=dtype).contiguous()
         eigenvectors_gradients[name] = eigenvectors_g.to(dtype=dtype).contiguous()
 
-    save_file(eigenvectors_activations, os.path.join(eigenvectors_test_path, "eigenvectors_activations.safetensors"))
-    save_file(eigenvectors_gradients, os.path.join(eigenvectors_test_path, "eigenvectors_gradients.safetensors"))
+    eigenvectors_act_path = os.path.join(eigenvectors_test_path, "eigenvectors_activations.safetensors")
+    eigenvectors_grad_path = os.path.join(eigenvectors_test_path, "eigenvectors_gradients.safetensors")
+
+    save_file(eigenvectors_activations, eigenvectors_act_path)
+    save_file(eigenvectors_gradients, eigenvectors_grad_path)
+
+    # Upload eigenvector artifacts to ClearML
+    task.upload_artifact(name="eigenvectors_activations", artifact_object=eigenvectors_act_path)
+    task.upload_artifact(name="eigenvectors_gradients", artifact_object=eigenvectors_grad_path)
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -495,10 +513,11 @@ def main():
             eigenvalue_corrections = eigenvalue_corrections + eigenvalue_corrections_rank
 
     eigenvalue_corrections.div_(total_processed_global)
-    save_file(
-        eigenvalue_corrections.to_dict(),
-        os.path.join(eigenvalue_correction_test_path, "eigenvalue_corrections.safetensors"),
-    )
+    eigenvalue_corr_path = os.path.join(eigenvalue_correction_test_path, "eigenvalue_corrections.safetensors")
+    save_file(eigenvalue_corrections.to_dict(), eigenvalue_corr_path)
+
+    # Upload eigenvalue correction artifacts to ClearML
+    task.upload_artifact(name="eigenvalue_corrections", artifact_object=eigenvalue_corr_path)
 
     print("\n=== Ground Truth Computation Complete ===")
     print(f"Results saved to: {test_path}")
