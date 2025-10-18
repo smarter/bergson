@@ -29,6 +29,14 @@ from bergson.hessians.utils import TensorDict
 from bergson.utils import assert_type
 from test_utils import set_all_seeds
 
+from clearml import Task
+task = Task.init(
+    project_name="bergson",
+    task_name="compute_ekfac_ground_truth",
+    output_uri=True,
+    auto_connect_frameworks=True,
+)
+task.execute_remotely(queue_name='default', exit_process=True)
 
 def allocate_batches_test(
     doc_lengths: list[int], N: int, workers: Optional[int] = None
