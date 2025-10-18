@@ -36,7 +36,6 @@ task = Task.init(
     output_uri=True,
     auto_connect_frameworks=True,
 )
-task.execute_remotely(queue_name='default', exit_process=True)
 
 def allocate_batches_test(
     doc_lengths: list[int], N: int, workers: Optional[int] = None
@@ -243,6 +242,8 @@ def main():
         help="Output directory for ground truth results (default: test_files/pile_100_examples/ground_truth)",
     )
     args = parser.parse_args()
+
+    task.execute_remotely(queue_name='default', exit_process=True)
 
     # Set random seeds for reproducibility
     set_all_seeds(42)
