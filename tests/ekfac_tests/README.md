@@ -4,14 +4,26 @@ This directory contains pytest tests for EKFAC (Eigenvalue-corrected Kronecker-F
 
 ## Overview
 
-The tests verify the correctness of EKFAC computations by comparing against ground truth data. Tests are organized into two main categories:
+The tests verify the correctness of EKFAC computations by comparing against ground truth data. Tests are organized into three main categories:
 
-1. **Compute Tests** (`test_compute_ekfac.py`): Verify EKFAC factor computation including covariances, eigenvectors, and eigenvalue corrections
-2. **Apply Tests** (`test_apply_ekfac.py`): Verify EKFAC transformation applied to gradients
+1. **Smoke Tests** (`test_smoke.py`): Fast unit tests that run on CPU without requiring test data or GPU
+2. **Compute Tests** (`test_compute_ekfac.py`): Verify EKFAC factor computation including covariances, eigenvectors, and eigenvalue corrections
+3. **Apply Tests** (`test_apply_ekfac.py`): Verify EKFAC transformation applied to gradients
 
 ## Running Tests
 
-### Quick Start
+### Quick Start (Smoke Tests)
+
+Run fast smoke tests on CPU without any test data:
+
+```bash
+cd tests/ekfac_tests
+pytest -m "smoke"
+```
+
+These tests validate basic functionality and are perfect for CI environments.
+
+### Running All Tests
 
 Run all tests (will skip tests requiring GPU/test data):
 
@@ -101,11 +113,29 @@ Shared fixtures are defined in `conftest.py`:
 
 ## CI Integration
 
-Tests are automatically run in CI on the `ekfac` branch. The CI configuration excludes tests requiring GPU or test data:
+Tests are automatically run in CI on the `ekfac` branch. The CI runs smoke tests that work on CPU without requiring test data:
 
 ```bash
-pytest -m "not requires_gpu and not requires_test_data"
+pytest -m "smoke"
 ```
+
+These smoke tests validate:
+- Import functionality
+- Basic tensor operations
+- Covariance computation logic
+- Eigendecomposition
+- Test utilities
+
+## Generating Minimal Test Data
+
+For local testing with a tiny model on CPU, you can generate minimal test data:
+
+```bash
+cd tests/ekfac_tests
+python generate_minimal_test_data.py --output-dir fixtures/minimal --num-samples 10
+```
+
+This uses a very small model (sdobson/nanochat) and generates ground truth data that can be used for integration tests on CPU.
 
 ## Legacy Scripts
 

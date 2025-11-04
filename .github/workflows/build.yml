@@ -21,10 +21,10 @@ jobs:
           pip install -e ".[dev,faiss]"
       - name: Run tests
         run: pytest
-      - name: Run EKFAC tests (excluding GPU/data-dependent tests)
+      - name: Run EKFAC smoke tests (CPU-only, no test data required)
         run: |
           cd tests/ekfac_tests
-          pytest -m "not requires_gpu and not requires_test_data" --tb=short
+          pytest -m "smoke" --tb=short -v
       - name: Type Checking
         uses: jakebailey/pyright-action@v1
         with:

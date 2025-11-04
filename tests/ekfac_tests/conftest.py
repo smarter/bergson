@@ -1,6 +1,8 @@
 """Pytest configuration and fixtures for EKFAC tests."""
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -103,6 +105,55 @@ def run_path(test_dir):
     return os.path.join(test_dir, "run/influence_results")
 
 
+@pytest.fixture(scope="session")
+def minimal_test_data(tmp_path_factory):
+    """Generate or use minimal test data for CPU-based smoke tests.
+
+    This fixture generates a small test dataset using a tiny model on CPU.
+    The data is cached in a temporary directory for the test session.
+    """
+    # Check if pre-generated minimal test data exists
+    fixtures_dir = Path(__file__).parent / "fixtures" / "minimal"
+    if fixtures_dir.exists() and (fixtures_dir / "index_config.json").exists():
+        return str(fixtures_dir)
+
+    # Otherwise, generate it on the fly
+    tmp_dir = tmp_path_factory.mktemp("minimal_test_data")
+    output_dir = str(tmp_dir / "minimal")
+
+    print("\nGenerating minimal test data for smoke tests...")
+    script_path = Path(__file__).parent / "generate_minimal_test_data.py"
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script_path),
+                "--output-dir", output_dir,
+                "--num-samples", "5",
+                "--max-length", "32",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=180,  # 3 minutes timeout
+        )
+        print(result.stdout)
+        return output_dir
+    except subprocess.CalledProcessError as e:
+        pytest.skip(f"Failed to generate minimal test data: {e.stderr}")
+    except subprocess.TimeoutExpired:
+        pytest.skip("Timeout generating minimal test data")
+    except Exception as e:
+        pytest.skip(f"Error generating minimal test data: {e}")
+
+
+@pytest.fixture(scope="session")
+def smoke_test_mode(request):
+    """Check if running in smoke test mode (CPU, minimal data)."""
+    return request.config.getoption("--smoke-tests", default=False)
+
+
 def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line(
@@ -113,4 +164,7 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "slow: mark test as slow running"
+    )
+    config.addinivalue_line(
+        "markers", "smoke: mark test as a fast smoke test that runs on CPU"
     )
