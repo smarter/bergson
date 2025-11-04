@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import torch
@@ -21,6 +22,12 @@ from ground_truth.collector import GroundTruthCovarianceCollector
 from test_utils import set_all_seeds
 
 from bergson.hessians.utils import TensorDict
+
+
+def log(msg):
+    """Print with timestamp."""
+    timestamp = time.strftime("%H:%M:%S")
+    print(f"[{timestamp}] {msg}", flush=True)
 
 
 def generate_test_data(
@@ -37,34 +44,41 @@ def generate_test_data(
         num_samples: Number of text samples
         max_length: Maximum sequence length
     """
+    log("Starting test data generation")
     set_all_seeds(42)
+    log("Seeds set")
 
-    print(f"Generating EKFAC test data...")
-    print(f"  Model: {model_name}")
-    print(f"  Samples: {num_samples}")
-    print(f"  Max length: {max_length}")
-    print(f"  Output: {output_dir}")
+    log(f"Configuration:")
+    log(f"  Model: {model_name}")
+    log(f"  Samples: {num_samples}")
+    log(f"  Max length: {max_length}")
+    log(f"  Output: {output_dir}")
 
     # Create directories
+    log("Creating output directories...")
     os.makedirs(f"{output_dir}/covariances", exist_ok=True)
     os.makedirs(f"{output_dir}/eigenvectors", exist_ok=True)
     os.makedirs(f"{output_dir}/eigenvalue_corrections", exist_ok=True)
+    log("Directories created")
 
     # Load model
-    print("\nLoading model...")
+    log("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    log("Tokenizer loaded")
 
+    log("Loading model (this may take a moment)...")
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=torch.float32,
         device_map="cpu",
     )
     model.eval()
+    log("Model loaded and set to eval mode")
 
     # Generate samples
-    print("Generating text samples...")
+    log("Generating text samples...")
     texts = [
         "The quick brown fox jumps over the lazy dog.",
         "Hello world, this is a test.",
@@ -73,9 +87,10 @@ def generate_test_data(
         "Testing is crucial for code quality.",
     ] * ((num_samples // 5) + 1)
     texts = texts[:num_samples]
+    log(f"Generated {len(texts)} text samples")
 
     # Tokenize
-    print("Tokenizing...")
+    log("Tokenizing text samples...")
     encodings = tokenizer(
         texts,
         padding=True,
@@ -83,30 +98,36 @@ def generate_test_data(
         max_length=max_length,
         return_tensors="pt",
     )
+    log(f"Tokenized: input_ids shape = {encodings['input_ids'].shape}")
 
     # Compute covariances
-    print("Computing covariances...")
+    log("Setting up covariance collector...")
     activation_covariances = {}
     gradient_covariances = {}
 
+    log("Creating GroundTruthCovarianceCollector...")
     collector = GroundTruthCovarianceCollector(
         model=model,
         activation_covariances=activation_covariances,
         gradient_covariances=gradient_covariances,
         target_modules=None,  # Auto-discover all Linear layers
     )
-
-    print(f"Found {len(collector.target_info)} linear layers")
+    log(f"Collector created, found {len(collector.target_info)} linear layers")
 
     total_processed = 0
+    log("Starting forward and backward pass with hooks...")
     with collector:
         input_ids = encodings["input_ids"]
         attention_mask = encodings["attention_mask"]
+        log(f"Prepared inputs: input_ids={input_ids.shape}, attention_mask={attention_mask.shape}")
 
         # Forward
+        log("Running forward pass...")
         outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        log("Forward pass complete")
 
         # Compute loss and backward
+        log("Computing loss...")
         labels = input_ids.clone()
         labels[attention_mask == 0] = -100
 
@@ -116,17 +137,24 @@ def generate_test_data(
             labels[:, 1:].reshape(-1),
             reduction="sum",
         )
+        log(f"Loss computed: {loss.item():.4f}")
+
+        log("Running backward pass...")
         loss.backward()
+        log("Backward pass complete")
 
         total_processed = (attention_mask == 1).sum().item()
+        log(f"Total tokens processed: {total_processed}")
 
     # Normalize
+    log("Normalizing covariances...")
     for name in activation_covariances:
         activation_covariances[name] /= total_processed
         gradient_covariances[name] /= total_processed
+    log(f"Normalized {len(activation_covariances)} covariance pairs")
 
     # Save covariances
-    print("Saving covariances...")
+    log("Saving covariances...")
     save_file(
         TensorDict(activation_covariances).cpu(),
         f"{output_dir}/covariances/activation_covariance.safetensors",
@@ -135,22 +163,28 @@ def generate_test_data(
         TensorDict(gradient_covariances).cpu(),
         f"{output_dir}/covariances/gradient_covariance.safetensors",
     )
+    log("Covariances saved")
 
+    log("Saving stats...")
     with open(f"{output_dir}/covariances/stats.json", "w") as f:
         json.dump({"total_processed_global": total_processed}, f)
+    log("Stats saved")
 
     # Compute eigenvectors
-    print("Computing eigenvectors...")
+    log("Computing eigenvectors...")
     activation_eigenvectors = {}
     gradient_eigenvectors = {}
 
-    for name in activation_covariances:
+    for i, name in enumerate(activation_covariances, 1):
+        log(f"  Computing eigenvectors for layer {i}/{len(activation_covariances)}: {name}")
         _, eigenvectors_a = torch.linalg.eigh(activation_covariances[name])
         activation_eigenvectors[name] = eigenvectors_a
 
         _, eigenvectors_g = torch.linalg.eigh(gradient_covariances[name])
         gradient_eigenvectors[name] = eigenvectors_g
+    log("All eigenvectors computed")
 
+    log("Saving eigenvectors...")
     save_file(
         TensorDict(activation_eigenvectors).cpu(),
         f"{output_dir}/eigenvectors/eigenvectors_activations.safetensors",
@@ -159,22 +193,26 @@ def generate_test_data(
         TensorDict(gradient_eigenvectors).cpu(),
         f"{output_dir}/eigenvectors/eigenvectors_gradients.safetensors",
     )
+    log("Eigenvectors saved")
 
     # Create dummy eigenvalue corrections (simplified)
-    print("Creating eigenvalue corrections...")
+    log("Creating eigenvalue corrections...")
     eigenvalue_corrections = {}
     layer_names = list(activation_covariances.keys())
     for name in layer_names:
         dim_g, dim_a = gradient_eigenvectors[name].shape[0], activation_eigenvectors[name].shape[0]
         eigenvalue_corrections[name] = torch.randn(dim_g, dim_a).abs() * 0.1
+    log(f"Created eigenvalue corrections for {len(layer_names)} layers")
 
+    log("Saving eigenvalue corrections...")
     save_file(
         TensorDict(eigenvalue_corrections).cpu(),
         f"{output_dir}/eigenvalue_corrections/eigenvalue_corrections.safetensors",
     )
+    log("Eigenvalue corrections saved")
 
     # Save config
-    print("Saving config...")
+    log("Creating config...")
     config = {
         "model_name": model_name,
         "data": {
@@ -191,14 +229,16 @@ def generate_test_data(
         "ekfac": True,
     }
 
+    log("Saving config...")
     with open(f"{output_dir}/index_config.json", "w") as f:
         json.dump(config, f, indent=2)
+    log("Config saved")
 
-    print(f"\n{'='*60}")
-    print("Test data generated successfully!")
-    print(f"  Layers: {len(layer_names)}")
-    print(f"  Tokens processed: {total_processed}")
-    print(f"{'='*60}\n")
+    log(f"\n{'='*60}")
+    log("Test data generated successfully!")
+    log(f"  Layers: {len(layer_names)}")
+    log(f"  Tokens processed: {total_processed}")
+    log(f"{'='*60}\n")
 
 
 if __name__ == "__main__":
