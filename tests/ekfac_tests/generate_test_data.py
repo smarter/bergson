@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Generate minimal EKFAC test data using a small model on CPU.
+
+This script generates ground truth data for EKFAC tests using a tiny model
+that can run on CPU, making tests accessible in CI environments.
+"""
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+import torch
+from safetensors.torch import save_file
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Add parent to path for imports
+sys.path.insert(0, str(Path(__file__).parent))
+from ground_truth.collector import GroundTruthCovarianceCollector
+from test_utils import set_all_seeds
+
+from bergson.hessians.utils import TensorDict
+
+
+def generate_test_data(
+    output_dir: str,
+    model_name: str = "gpt2",
+    num_samples: int = 5,
+    max_length: int = 32,
+):
+    """Generate minimal EKFAC test data.
+
+    Args:
+        output_dir: Output directory for test data
+        model_name: HuggingFace model name
+        num_samples: Number of text samples
+        max_length: Maximum sequence length
+    """
+    set_all_seeds(42)
+
+    print(f"Generating EKFAC test data...")
+    print(f"  Model: {model_name}")
+    print(f"  Samples: {num_samples}")
+    print(f"  Max length: {max_length}")
+    print(f"  Output: {output_dir}")
+
+    # Create directories
+    os.makedirs(f"{output_dir}/covariances", exist_ok=True)
+    os.makedirs(f"{output_dir}/eigenvectors", exist_ok=True)
+    os.makedirs(f"{output_dir}/eigenvalue_corrections", exist_ok=True)
+
+    # Load model
+    print("\nLoading model...")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float32,
+        device_map="cpu",
+    )
+    model.eval()
+
+    # Generate samples
+    print("Generating text samples...")
+    texts = [
+        "The quick brown fox jumps over the lazy dog.",
+        "Hello world, this is a test.",
+        "Machine learning is fascinating.",
+        "PyTorch is amazing for deep learning.",
+        "Testing is crucial for code quality.",
+    ] * ((num_samples // 5) + 1)
+    texts = texts[:num_samples]
+
+    # Tokenize
+    print("Tokenizing...")
+    encodings = tokenizer(
+        texts,
+        padding=True,
+        truncation=True,
+        max_length=max_length,
+        return_tensors="pt",
+    )
+
+    # Find linear layers
+    layer_names = []
+    for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Linear) and "lm_head" not in name:
+            layer_names.append(name)
+
+    print(f"Found {len(layer_names)} linear layers")
+
+    # Compute covariances
+    print("Computing covariances...")
+    activation_covariances = {}
+    gradient_covariances = {}
+
+    collector = GroundTruthCovarianceCollector(
+        model=model,
+        layer_names=layer_names,
+        activation_covariances=activation_covariances,
+        gradient_covariances=gradient_covariances,
+    )
+
+    total_processed = 0
+    with collector:
+        input_ids = encodings["input_ids"]
+        attention_mask = encodings["attention_mask"]
+
+        # Forward
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        # Compute loss and backward
+        labels = input_ids.clone()
+        labels[attention_mask == 0] = -100
+
+        logits = outputs.logits
+        loss = torch.nn.functional.cross_entropy(
+            logits[:, :-1, :].reshape(-1, logits.shape[-1]),
+            labels[:, 1:].reshape(-1),
+            reduction="sum",
+        )
+        loss.backward()
+
+        total_processed = (attention_mask == 1).sum().item()
+
+    # Normalize
+    for name in activation_covariances:
+        activation_covariances[name] /= total_processed
+        gradient_covariances[name] /= total_processed
+
+    # Save covariances
+    print("Saving covariances...")
+    save_file(
+        TensorDict(activation_covariances).cpu(),
+        f"{output_dir}/covariances/activation_covariance.safetensors",
+    )
+    save_file(
+        TensorDict(gradient_covariances).cpu(),
+        f"{output_dir}/covariances/gradient_covariance.safetensors",
+    )
+
+    with open(f"{output_dir}/covariances/stats.json", "w") as f:
+        json.dump({"total_processed_global": total_processed}, f)
+
+    # Compute eigenvectors
+    print("Computing eigenvectors...")
+    activation_eigenvectors = {}
+    gradient_eigenvectors = {}
+
+    for name in activation_covariances:
+        _, eigenvectors_a = torch.linalg.eigh(activation_covariances[name])
+        activation_eigenvectors[name] = eigenvectors_a
+
+        _, eigenvectors_g = torch.linalg.eigh(gradient_covariances[name])
+        gradient_eigenvectors[name] = eigenvectors_g
+
+    save_file(
+        TensorDict(activation_eigenvectors).cpu(),
+        f"{output_dir}/eigenvectors/eigenvectors_activations.safetensors",
+    )
+    save_file(
+        TensorDict(gradient_eigenvectors).cpu(),
+        f"{output_dir}/eigenvectors/eigenvectors_gradients.safetensors",
+    )
+
+    # Create dummy eigenvalue corrections (simplified)
+    print("Creating eigenvalue corrections...")
+    eigenvalue_corrections = {}
+    for name in layer_names:
+        dim_g, dim_a = gradient_eigenvectors[name].shape[0], activation_eigenvectors[name].shape[0]
+        eigenvalue_corrections[name] = torch.randn(dim_g, dim_a).abs() * 0.1
+
+    save_file(
+        TensorDict(eigenvalue_corrections).cpu(),
+        f"{output_dir}/eigenvalue_corrections/eigenvalue_corrections.safetensors",
+    )
+
+    # Save config
+    print("Saving config...")
+    config = {
+        "model_name": model_name,
+        "data": {
+            "dataset_name": "minimal_test",
+            "data_dir": None,
+            "split": "train",
+            "tokenizer_name": model_name,
+        },
+        "run_path": None,
+        "debug": True,
+        "fsdp": False,
+        "world_size": 1,
+        "precision": "float32",
+        "ekfac": True,
+    }
+
+    with open(f"{output_dir}/index_config.json", "w") as f:
+        json.dump(config, f, indent=2)
+
+    print(f"\n{'='*60}")
+    print("Test data generated successfully!")
+    print(f"  Layers: {len(layer_names)}")
+    print(f"  Tokens processed: {total_processed}")
+    print(f"{'='*60}\n")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate EKFAC test data")
+    parser.add_argument("--output-dir", type=str, required=True)
+    parser.add_argument("--model-name", type=str, default="gpt2")
+    parser.add_argument("--num-samples", type=int, default=5)
+    parser.add_argument("--max-length", type=int, default=32)
+
+    args = parser.parse_args()
+    generate_test_data(
+        output_dir=args.output_dir,
+        model_name=args.model_name,
+        num_samples=args.num_samples,
+        max_length=args.max_length,
+    )
