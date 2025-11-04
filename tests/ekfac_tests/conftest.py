@@ -20,8 +20,8 @@ def pytest_addoption(parser):
     parser.addoption(
         "--model-name",
         action="store",
-        default="gpt2",
-        help="Model to use for tests (default: gpt2)",
+        default="calum/tinystories-gpt2-3M",
+        help="Model to use for tests (default: calum/tinystories-gpt2-3M)",
     )
     parser.addoption(
         "--num-samples",

@@ -22,7 +22,7 @@ jobs:
       - name: Run EKFAC tests
         run: |
           cd tests/ekfac_tests
-          pytest --model-name gpt2 --num-samples 3 --max-length 16
+          pytest --model-name calum/tinystories-gpt2-3M --num-samples 3 --max-length 16
       # TODO: run pyright on whole codebase
       - name: Type Checking bergson/hessians
         uses: jakebailey/pyright-action@v1

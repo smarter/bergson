@@ -25,7 +25,7 @@ from bergson.hessians.utils import TensorDict
 
 def generate_test_data(
     output_dir: str,
-    model_name: str = "gpt2",
+    model_name: str = "calum/tinystories-gpt2-3M",
     num_samples: int = 5,
     max_length: int = 32,
 ):
@@ -84,14 +84,6 @@ def generate_test_data(
         return_tensors="pt",
     )
 
-    # Find linear layers
-    layer_names = []
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Linear) and "lm_head" not in name:
-            layer_names.append(name)
-
-    print(f"Found {len(layer_names)} linear layers")
-
     # Compute covariances
     print("Computing covariances...")
     activation_covariances = {}
@@ -99,10 +91,12 @@ def generate_test_data(
 
     collector = GroundTruthCovarianceCollector(
         model=model,
-        layer_names=layer_names,
         activation_covariances=activation_covariances,
         gradient_covariances=gradient_covariances,
+        target_modules=None,  # Auto-discover all Linear layers
     )
+
+    print(f"Found {len(collector.target_info)} linear layers")
 
     total_processed = 0
     with collector:
@@ -169,6 +163,7 @@ def generate_test_data(
     # Create dummy eigenvalue corrections (simplified)
     print("Creating eigenvalue corrections...")
     eigenvalue_corrections = {}
+    layer_names = list(activation_covariances.keys())
     for name in layer_names:
         dim_g, dim_a = gradient_eigenvectors[name].shape[0], activation_eigenvectors[name].shape[0]
         eigenvalue_corrections[name] = torch.randn(dim_g, dim_a).abs() * 0.1
@@ -209,7 +204,7 @@ def generate_test_data(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate EKFAC test data")
     parser.add_argument("--output-dir", type=str, required=True)
-    parser.add_argument("--model-name", type=str, default="gpt2")
+    parser.add_argument("--model-name", type=str, default="calum/tinystories-gpt2-3M")
     parser.add_argument("--num-samples", type=int, default=5)
     parser.add_argument("--max-length", type=int, default=32)
 
