@@ -5,14 +5,29 @@ model:
 
 # K-FAC Collection Parameters
 collect_kfac:
-  layers: "14"
-  projections: "gate"
-  output_dir: "memorization_kfac/data/kfac_factors/"
+  # Hardware settings
+  device: "cuda"
+  dtype: "bfloat16"  # choices: float32, bfloat16
+
+  # Data settings
+  corpus: "dolmo"  # choices: olmo, dolmo
+  nbytes: 100000000  # ~100MB of text data
+  seq_len: 512
+  batch_size: 32
+
+  # Layer processing
+  layers_per_pass: 1  # Process this many layers before flushing
+  target_blocks: "14"  # Space-separated block IDs (e.g., "14" or "14 15 16")
+
+  # Output
+  save_dir: "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
+
+  # Optional: use multinomial-sampled labels instead of gold labels
+  sample_labels: ""  # Set to "--sample-labels" to enable
 
 # K-FAC Edit Parameters
 kfac_edit:
   # keep_mass ∈ [0,1] controls how much curvature to retain
   # Higher values = less compression, more memorization retained
   # Lower values = more compression, less memorization
-  #layers_json: '{"31": {"gate": 0.8, "up": 0.8, "down": 0.8}}'
-  layers_json: '{}'
+  layers_json: '{}'  # e.g., '{"31": {"gate": 0.8, "up": 0.8, "down": 0.8}}'
