@@ -1,9 +1,9 @@
 stages:
   collect_kfac_bergson:
     cmd: >-
-      python memorization_kfac/data/collect_kfac_bergson.py
+      CUDA_VISIBLE_DEVICES="" python memorization_kfac/data/collect_kfac_bergson.py
       --model ${model.name}
-      --device ${collect_kfac.device}
+      --device cpu
       --dtype ${collect_kfac.dtype}
       --corpus ${collect_kfac.corpus}
       --nbytes ${collect_kfac.nbytes}
@@ -12,6 +12,7 @@ stages:
       --layers_per_pass ${collect_kfac.layers_per_pass}
       --target_blocks ${collect_kfac.target_blocks}
       --save_dir memorization_kfac/data/kfac_factors_bergson
+      --kfac-only
       ${collect_kfac.sample_labels}
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
@@ -23,17 +24,19 @@ stages:
     outs:
       - memorization_kfac/data/kfac_factors_bergson
     desc: |
-      Collect K-FAC factors using bergson's EKFAC implementation.
+      Collect K-FAC factors using bergson's implementation (KFAC mode).
+      Uses --kfac-only flag to disable eigenvalue correction (pure KFAC, not EKFAC).
       Streams text through model and computes:
       - A = E[aa^T] (activation covariance)
       - G = E[gg^T] (gradient covariance)
       Uses bergson's CovarianceCollector for efficient computation.
+      Uses CPU device for collection.
 
   collect_kfac_factors:
     cmd:
       - python memorization_kfac/data/collect_kfac_multilayer.py
         --model ${model.name}
-        --device ${collect_kfac.device}
+        --device cpu
         --dtype ${collect_kfac.dtype}
         --corpus ${collect_kfac.corpus}
         --nbytes ${collect_kfac.nbytes}
@@ -53,6 +56,7 @@ stages:
       - A = E[aa^T] (activation covariance)
       - G = E[gg^T] (gradient covariance)
       for each MLP projection (gate, up, down) in specified layers.
+      Uses CPU device for collection.
 
   eval_kfac_edit:
     cmd: >-
@@ -70,3 +74,44 @@ stages:
       Apply K-FAC curvature-based weight editing and evaluate memorization.
       Keeps top curvature mass to suppress memorization while
       preserving shared structure. Outputs perplexity and memorization metrics.
+
+  convert_bergson_to_original:
+    cmd: >-
+      CUDA_VISIBLE_DEVICES="" python memorization_kfac/data/convert_bergson_to_original.py
+      --bergson_dir memorization_kfac/data/kfac_factors_bergson
+      --output_dir memorization_kfac/data/kfac_factors_bergson_converted
+    deps:
+      - memorization_kfac/data/convert_bergson_to_original.py
+      - memorization_kfac/data/kfac_factors_bergson
+    outs:
+      - memorization_kfac/data/kfac_factors_bergson_converted
+    desc: |
+      Convert bergson KFAC output to original format (Option A).
+      Handles:
+      - Key name mapping: layers.N.mlp.gate_proj → blkN.gate
+      - Normalization: raw sums → normalized by n_tokens
+      - Format conversion: safetensors → .pt
+
+  compare_kfac_implementations:
+    cmd: >-
+      CUDA_VISIBLE_DEVICES="" python memorization_kfac/data/compare_kfac_implementations.py
+      --original_dir "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
+      --bergson_converted_dir memorization_kfac/data/kfac_factors_bergson_converted
+      --output_json memorization_kfac/metrics/kfac_comparison_results.json
+    deps:
+      - memorization_kfac/data/compare_kfac_implementations.py
+      - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
+      - memorization_kfac/data/kfac_factors_bergson_converted
+    params:
+      - model.size
+    metrics:
+      - memorization_kfac/metrics/kfac_comparison_results.json:
+          cache: false
+    desc: |
+      Compare K-FAC factors from original and bergson implementations.
+      Computes similarity metrics:
+      - Frobenius norm difference
+      - Relative error
+      - Cosine similarity
+      - Max/mean absolute difference
+      Reports aggregate statistics across all modules.
