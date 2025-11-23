@@ -14,7 +14,7 @@ collect_kfac:
   # nbytes: 100000000  # ~100MB of text data
   nbytes: 10000
   seq_len: 512
-  batch_size: 8 #32
+  batch_size: 1 #32
 
   # Layer processing
   layers_per_pass: 1  # Process this many layers before flushing
