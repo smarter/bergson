@@ -11,16 +11,14 @@ collect_kfac:
 
   # Data settings
   corpus: "dolmo"  # choices: olmo, dolmo
-  nbytes: 100000000  # ~100MB of text data
+  # nbytes: 100000000  # ~100MB of text data
+  nbytes: 10000
   seq_len: 512
-  batch_size: 32
+  batch_size: 8 #32
 
   # Layer processing
   layers_per_pass: 1  # Process this many layers before flushing
   target_blocks: "14"  # Space-separated block IDs (e.g., "14" or "14 15 16")
-
-  # Output
-  save_dir: "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
 
   # Optional: use multinomial-sampled labels instead of gold labels
   sample_labels: ""  # Set to "--sample-labels" to enable
