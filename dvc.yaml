@@ -1,4 +1,34 @@
 stages:
+  collect_kfac_bergson:
+    cmd: >-
+      python memorization_kfac/data/collect_kfac_bergson.py
+      --model ${model.name}
+      --device ${collect_kfac.device}
+      --dtype ${collect_kfac.dtype}
+      --corpus ${collect_kfac.corpus}
+      --nbytes ${collect_kfac.nbytes}
+      --seq_len ${collect_kfac.seq_len}
+      --batch_size ${collect_kfac.batch_size}
+      --layers_per_pass ${collect_kfac.layers_per_pass}
+      --target_blocks ${collect_kfac.target_blocks}
+      --save_dir memorization_kfac/data/kfac_factors_bergson
+      ${collect_kfac.sample_labels}
+    deps:
+      - memorization_kfac/data/collect_kfac_bergson.py
+      - bergson/hessians/collector.py
+      - bergson/hessians/sharded_computation.py
+    params:
+      - model.name
+      - collect_kfac
+    outs:
+      - memorization_kfac/data/kfac_factors_bergson
+    desc: |
+      Collect K-FAC factors using bergson's EKFAC implementation.
+      Streams text through model and computes:
+      - A = E[aa^T] (activation covariance)
+      - G = E[gg^T] (gradient covariance)
+      Uses bergson's CovarianceCollector for efficient computation.
+
   collect_kfac_factors:
     cmd:
       - python memorization_kfac/data/collect_kfac_multilayer.py
