@@ -52,6 +52,13 @@ def parse():
         action="store_true",
         help="If set, use multinomial-sampled labels",
     )
+    p.add_argument(
+        "--kfac-only",
+        action="store_true",
+        dest="kfac_only",
+        help="Use KFAC (covariances only) instead of EKFAC (with eigenvalue correction). "
+        "When enabled, only CovarianceCollector is used without LambdaCollector.",
+    )
     return p.parse_args()
 
 
@@ -119,6 +126,7 @@ class BergsonCovarianceCollector:
         target_blocks: list[int],
         save_dir: pathlib.Path,
         dtype: torch.dtype,
+        kfac_only: bool = True,
         rank: int = 0,
         world_size: int = 1,
     ):
@@ -127,6 +135,7 @@ class BergsonCovarianceCollector:
         self.target_blocks = target_blocks
         self.save_dir = save_dir
         self.dtype = dtype
+        self.kfac_only = kfac_only
         self.rank = rank
         self.world_size = world_size
 
@@ -211,13 +220,16 @@ class BergsonCovarianceCollector:
             "blocks": self.target_blocks,
             "n_tokens": self.total_tokens,
             "format": "bergson",
+            "kfac_only": self.kfac_only,
+            "method": "KFAC" if self.kfac_only else "EKFAC",
         }
 
         with open(self.save_dir / "metadata.json", "w") as f:
             json.dump(metadata, indent=2, fp=f)
 
+        method_str = "KFAC" if self.kfac_only else "EKFAC"
         print(
-            f"✓ Saved K-FAC factors for blocks {self.target_blocks} ({self.total_tokens:,} tokens)"
+            f"✓ Saved {method_str} factors for blocks {self.target_blocks} ({self.total_tokens:,} tokens)"
         )
 
 
@@ -255,6 +267,8 @@ def main():
     args.save_dir.mkdir(parents=True, exist_ok=True)
 
     # Process target blocks
+    method = "KFAC" if args.kfac_only else "EKFAC"
+    print(f"Using {method} method (kfac_only={args.kfac_only})")
     print(f"Processing blocks: {args.target_blocks}")
     print(f"Streaming ~{args.nbytes / 1e6:.0f}MB from {args.corpus}")
 
@@ -268,6 +282,7 @@ def main():
         target_blocks=args.target_blocks,
         save_dir=args.save_dir,
         dtype=model.dtype,
+        kfac_only=args.kfac_only,
     )
 
     # Collect covariances
