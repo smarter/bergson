@@ -1,26 +1,22 @@
 stages:
   collect_kfac_factors:
-    cmd: >-
-      python memorization_kfac/data/collect_kfac_multilayer.py
-      --model ${model.name}
-      --device ${collect_kfac.device}
-      --dtype ${collect_kfac.dtype}
-      --corpus ${collect_kfac.corpus}
-      --nbytes ${collect_kfac.nbytes}
-      --seq_len ${collect_kfac.seq_len}
-      --batch_size ${collect_kfac.batch_size}
-      --layers_per_pass ${collect_kfac.layers_per_pass}
-      --target_blocks ${collect_kfac.target_blocks}
-      --save_dir ${collect_kfac.save_dir}
-      ${collect_kfac.sample_labels}
+    cmd:
+      - python memorization_kfac/data/collect_kfac_multilayer.py
+        --model ${model.name}
+        --device ${collect_kfac.device}
+        --dtype ${collect_kfac.dtype}
+        --corpus ${collect_kfac.corpus}
+        --nbytes ${collect_kfac.nbytes}
+        --seq_len ${collect_kfac.seq_len}
+        --batch_size ${collect_kfac.batch_size}
+        --layers_per_pass ${collect_kfac.layers_per_pass}
+        --target_blocks ${collect_kfac.target_blocks}
+        --save_dir "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
+        ${collect_kfac.sample_labels}
     deps:
       - memorization_kfac/data/collect_kfac_multilayer.py
-    params:
-      - model.name
-      - collect_kfac
     outs:
-      - ${collect_kfac.save_dir}:
-          cache: false
+      - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
     desc: |
       Collect K-FAC factors (A and G matrices) from OLMo-2 model.
       Streams text through model and computes:
@@ -36,11 +32,7 @@ stages:
       --use-cache
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
-      - ${collect_kfac.save_dir}
-    params:
-      - model.size
-      - kfac_edit.layers_json
-      - collect_kfac.save_dir
+      - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
     metrics:
       - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
