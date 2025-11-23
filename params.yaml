@@ -1,0 +1,18 @@
+# Model Configuration
+model:
+  name: "allenai/OLMo-2-0425-1B"
+  size: "1b"
+
+# K-FAC Collection Parameters
+collect_kfac:
+  layers: "14"
+  projections: "gate"
+  output_dir: "memorization_kfac/data/kfac_factors/"
+
+# K-FAC Edit Parameters
+kfac_edit:
+  # keep_mass ∈ [0,1] controls how much curvature to retain
+  # Higher values = less compression, more memorization retained
+  # Lower values = more compression, less memorization
+  #layers_json: '{"31": {"gate": 0.8, "up": 0.8, "down": 0.8}}'
+  layers_json: '{}'

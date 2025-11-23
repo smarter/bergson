@@ -40,7 +40,7 @@ faiss = [
 bergson = "bergson.__main__:main"
 
 [tool.pyright]
-include = ["bergson*", "tests/ekfac_tests"]
+include = ["bergson*", "tests/ekfac_tests", "memorization_kfac*"]
 ## Temporary excludes before we merge ekfac into the main branch
 exclude = [
     "bergson/attributor.py",
@@ -51,7 +51,7 @@ exclude = [
 reportPrivateImportUsage = false
 
 [tool.setuptools.packages.find]
-include = ["bergson*"]
+include = ["bergson*", "memorization_kfac*"]
 
 [tool.ruff]
 lint.ignore = ["E741", "F722"]   # Ambiguous variable name and jaxtyping shape annotation
@@ -63,6 +63,7 @@ line-length = 120
 
 [dependency-groups]
 dev = [
+    "dvc>=3.64.0",
     "pre-commit>=4.2.0",
     "pre-commit-uv>=4.1.5",
     "pyright>=1.1.406",
