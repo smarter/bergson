@@ -1,0 +1,34 @@
+stages:
+  collect_kfac_factors:
+    cmd: >-
+      python memorization_kfac/data/collect_kfac_multilayer.py
+      --model ${model.name}
+      --layers ${collect_kfac.layers}
+      --projections ${collect_kfac.projections}
+      --out "${collect_kfac.output_dir}/olmo2_${model.size}"
+    deps:
+      - memorization_kfac/data/collect_kfac_multilayer.py
+    outs:
+      - ${collect_kfac.output_dir}/olmo2_${model.size}
+    desc: |
+      Collect K-FAC factors (A and G matrices) from OLMo-2 model.
+      Streams text through model and computes:
+      - A = E[aa^T] (activation covariance)
+      - G = E[gg^T] (gradient covariance)
+      for each MLP projection in specified layers.
+
+  eval_kfac_edit:
+    cmd: >-
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size ${model.size}
+      --layers-json ${kfac_edit.layers_json}
+      --use-cache
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - ${collect_kfac.output_dir}/olmo2_${model.size}
+    metrics:
+      - memorization_kfac/metrics/kfac_eval_results.json
+    desc: |
+      Apply K-FAC curvature-based weight editing and evaluate memorization.
+      Keeps top curvature mass to suppress memorization while
+      preserving shared structure. Outputs perplexity and memorization metrics.
