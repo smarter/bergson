@@ -1,9 +1,9 @@
 stages:
   collect_kfac_bergson:
     cmd: >-
-      CUDA_VISIBLE_DEVICES="" python memorization_kfac/data/collect_kfac_bergson.py
+      python memorization_kfac/data/collect_kfac_bergson.py
       --model ${model.name}
-      --device cpu
+      --device ${collect_kfac.device}
       --dtype ${collect_kfac.dtype}
       --corpus ${collect_kfac.corpus}
       --nbytes ${collect_kfac.nbytes}
@@ -77,7 +77,7 @@ stages:
 
   convert_bergson_to_original:
     cmd: >-
-      CUDA_VISIBLE_DEVICES="" python memorization_kfac/data/convert_bergson_to_original.py
+      python memorization_kfac/data/convert_bergson_to_original.py
       --bergson_dir memorization_kfac/data/kfac_factors_bergson
       --output_dir memorization_kfac/data/kfac_factors_bergson_converted
     deps:
@@ -94,7 +94,7 @@ stages:
 
   compare_kfac_implementations:
     cmd: >-
-      CUDA_VISIBLE_DEVICES="" python memorization_kfac/data/compare_kfac_implementations.py
+      python memorization_kfac/data/compare_kfac_implementations.py
       --original_dir "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
       --bergson_converted_dir memorization_kfac/data/kfac_factors_bergson_converted
       --output_json memorization_kfac/metrics/kfac_comparison_results.json
