@@ -131,11 +131,12 @@ class BergsonCovarianceCollector:
         self.world_size = world_size
 
         # Discover target modules (gate, up, down projections for specified blocks)
+        # Note: model.base_model uses names without 'model.' prefix
         self.target_modules = set()
         for blk in target_blocks:
-            self.target_modules.add(f"model.layers.{blk}.mlp.gate_proj")
-            self.target_modules.add(f"model.layers.{blk}.mlp.up_proj")
-            self.target_modules.add(f"model.layers.{blk}.mlp.down_proj")
+            self.target_modules.add(f"layers.{blk}.mlp.gate_proj")
+            self.target_modules.add(f"layers.{blk}.mlp.up_proj")
+            self.target_modules.add(f"layers.{blk}.mlp.down_proj")
 
         # Get target info using bergson's discovery
         self.target_info = HookCollectorBase.discover_targets(
