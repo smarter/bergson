@@ -31,8 +31,8 @@ stages:
       size: 10093
     - path: memorization_kfac/data/collect_kfac_bergson.py
       hash: md5
-      md5: 36d1f0ccf8f179db66767680acbf5423
-      size: 8959
+      md5: a3374355c5fdd95ace87b6dd9512455b
+      size: 9009
     params:
       params.yaml:
         collect_kfac:
@@ -44,12 +44,11 @@ stages:
           batch_size: 8
           layers_per_pass: 1
           target_blocks: '14'
-          save_dir: memorization_kfac/data/kfac_factors/olmo2_${model.size}
           sample_labels: ''
         model.name: allenai/OLMo-2-0425-1B
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: c11e0d84275edd231893b6040a06fa4e.dir
-      size: 103
+      md5: 895b9d8746111cb8b6de64c11c54d68f.dir
+      size: 427819679
       nfiles: 3
