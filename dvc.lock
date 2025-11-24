@@ -2,9 +2,11 @@ schema: '2.0'
 stages:
   collect_kfac_factors:
     cmd:
-    - 'python memorization_kfac/data/collect_kfac_multilayer.py --model allenai/OLMo-2-0425-1B
-      --device cuda --dtype bfloat16 --corpus dolmo --nbytes 10000 --seq_len 512 --batch_size
-      4 --layers_per_pass 1 --target_blocks 14 --save_dir "memorization_kfac/data/kfac_factors/olmo2_1b" '
+    - python memorization_kfac/data/collect_kfac_multilayer.py --model 
+      allenai/OLMo-2-0425-1B --device cuda --dtype bfloat16 --corpus dolmo 
+      --nbytes 1000000 --seq_len 512 --batch_size 32 --layers_per_pass 3 
+      --target_blocks 10 14 15 --save_dir 
+      "memorization_kfac/data/kfac_factors/olmo2_1b" --sample_labels
     deps:
     - path: memorization_kfac/data/collect_kfac_multilayer.py
       hash: md5
@@ -13,14 +15,15 @@ stages:
     outs:
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: 35a02fc325d3000525445fc6ba11e486.dir
-      size: 855641173
+      md5: 7e87e89635124ae7841bb25eb5fa06ea.dir
+      size: 2566920735
       nfiles: 2
   collect_kfac_bergson:
-    cmd: 'python memorization_kfac/data/collect_kfac_bergson.py --model allenai/OLMo-2-0425-1B
-      --device cuda --dtype bfloat16 --corpus dolmo --nbytes 10000 --seq_len 512 --batch_size
-      4 --layers_per_pass 1 --target_blocks 14 --save_dir memorization_kfac/data/kfac_factors_bergson
-      --kfac-only '
+    cmd: python memorization_kfac/data/collect_kfac_bergson.py --model 
+      allenai/OLMo-2-0425-1B --device cuda --dtype bfloat16 --corpus dolmo 
+      --nbytes 1000000 --seq_len 512 --batch_size 32 --layers_per_pass 3 
+      --target_blocks 10 14 15 --save_dir 
+      memorization_kfac/data/kfac_factors_bergson --kfac-only --sample_labels
     deps:
     - path: bergson/hessians/collector.py
       hash: md5
@@ -40,18 +43,18 @@ stages:
           device: cuda
           dtype: bfloat16
           corpus: dolmo
-          nbytes: 10000
+          nbytes: 1000000
           seq_len: 512
-          batch_size: 4
-          layers_per_pass: 1
-          target_blocks: '14'
-          sample_labels: ''
+          batch_size: 32
+          layers_per_pass: 3
+          target_blocks: 10 14 15
+          sample_labels: --sample_labels
         model.name: allenai/OLMo-2-0425-1B
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: 199d63b26b5ccb598c9eae8cf6a7f176.dir
-      size: 427819720
+      md5: d4f2bd70975d3383709f0bb1e6d99480.dir
+      size: 1283458946
       nfiles: 3
   convert_bergson_to_original:
     cmd: python memorization_kfac/data/convert_bergson_to_original.py 
@@ -64,15 +67,15 @@ stages:
       size: 4382
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: 199d63b26b5ccb598c9eae8cf6a7f176.dir
-      size: 427819720
+      md5: d4f2bd70975d3383709f0bb1e6d99480.dir
+      size: 1283458946
       nfiles: 3
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: 01275e2bccb1b8bd68a85f44ec0acf7a.dir
-      size: 855641125
-      nfiles: 1
+      md5: 5db68333b71da6b0902c2af4ed595bb2.dir
+      size: 2566923375
+      nfiles: 3
   compare_kfac_implementations:
     cmd: python memorization_kfac/data/compare_kfac_implementations.py 
       --original_dir "memorization_kfac/data/kfac_factors/olmo2_1b" 
@@ -86,19 +89,19 @@ stages:
       size: 6833
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: 35a02fc325d3000525445fc6ba11e486.dir
-      size: 855641173
+      md5: 7e87e89635124ae7841bb25eb5fa06ea.dir
+      size: 2566920735
       nfiles: 2
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: 01275e2bccb1b8bd68a85f44ec0acf7a.dir
-      size: 855641125
-      nfiles: 1
+      md5: 5db68333b71da6b0902c2af4ed595bb2.dir
+      size: 2566923375
+      nfiles: 3
     params:
       params.yaml:
         model.size: 1b
     outs:
     - path: memorization_kfac/metrics/kfac_comparison_results.json
       hash: md5
-      md5: 11597de88bf2705da8b3015c119a17a2
-      size: 2421
+      md5: a9b59c7df3d73aeff97a60a9f4d2d862
+      size: 6141
