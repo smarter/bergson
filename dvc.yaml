@@ -130,6 +130,60 @@ stages:
       - Pile 10k Perplexity: 26.53 (up from 23.19 baseline)
 
   # =============================================================================
+  # Result Validation (Compare against Paper Values)
+  # =============================================================================
+  # Computes absolute and relative errors between experimental results and
+  # expected values from the paper. Flags metrics outside 5% tolerance.
+
+  validate_table1_7b:
+    cmd: >-
+      python memorization_kfac/evaluations/validate_paper_results.py
+      --results-file memorization_kfac/metrics/kfac_eval_results.json
+      --model-size 7b
+      --tolerance 0.05
+      --output memorization_kfac/metrics/validation_table1_7b.json
+    deps:
+      - memorization_kfac/evaluations/validate_paper_results.py
+      - memorization_kfac/metrics/kfac_eval_results.json
+    metrics:
+      - memorization_kfac/metrics/validation_table1_7b.json:
+          cache: false
+    desc: |
+      Validate Table 1 (7B) results against paper values.
+
+      Computes for each metric:
+      - Absolute error: actual - expected
+      - Relative error: (actual - expected) / expected
+      - Percentage relative error
+
+      Flags metrics with >5% relative error as issues.
+
+      Validates:
+      - Dolma: strict_acc, loose_acc, avg_levenshtein
+      - Quotes: strict_acc, loose_acc, avg_levenshtein
+      - Perplexity (Pile 10k)
+      - nDCG@10
+
+  validate_table1_1b:
+    cmd: >-
+      python memorization_kfac/evaluations/validate_paper_results.py
+      --results-file memorization_kfac/metrics/kfac_eval_results.json
+      --model-size 1b
+      --tolerance 0.05
+      --output memorization_kfac/metrics/validation_table1_1b.json
+    deps:
+      - memorization_kfac/evaluations/validate_paper_results.py
+      - memorization_kfac/metrics/kfac_eval_results.json
+    metrics:
+      - memorization_kfac/metrics/validation_table1_1b.json:
+          cache: false
+    desc: |
+      Validate Table 5/Appendix F (1B) results against paper values.
+
+      Same validation as 7B model but with 1B expected values.
+      Flags metrics with >5% relative error as issues.
+
+  # =============================================================================
   # Benchmark Evaluations (Paper Section 6, Tables 8-10, Appendix I)
   # =============================================================================
   # Reproduces: "We use the OLMES evaluation suite to measure performance
