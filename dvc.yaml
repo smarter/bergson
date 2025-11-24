@@ -136,6 +136,7 @@ stages:
       --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
       --use-cache
       --perplexity
+      --results-dir memorization_kfac/metrics
       --results-tag table1_7b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
@@ -144,7 +145,7 @@ stages:
       - memorization_kfac/cache/kfac_weights_paper_7b:
           cache: true
     metrics:
-      - memorization_kfac/metrics/kfac_eval_results.json:
+      - memorization_kfac/metrics/kfac_eval_log_7b_table1_7b.jsonl:
           cache: false
     desc: |
       Paper Table 1 (7B model, all columns): Apply K-FAC edit and evaluate.
@@ -171,6 +172,7 @@ stages:
       --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
       --use-cache
       --perplexity
+      --results-dir memorization_kfac/metrics
       --results-tag table1_1b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
@@ -179,7 +181,7 @@ stages:
       - memorization_kfac/cache/kfac_weights_paper_1b:
           cache: true
     metrics:
-      - memorization_kfac/metrics/kfac_eval_results.json:
+      - memorization_kfac/metrics/kfac_eval_log_1b_table1_1b.jsonl:
           cache: false
     desc: |
       Paper Table 5 (Appendix F, 1B model): Apply K-FAC edit and evaluate.
@@ -206,13 +208,13 @@ stages:
   validate_table1_7b:
     cmd: >-
       python memorization_kfac/evaluations/validate_paper_results.py
-      --results-file memorization_kfac/metrics/kfac_eval_results.json
+      --results-file memorization_kfac/metrics/kfac_eval_log_7b_table1_7b.jsonl
       --model-size 7b
       --tolerance 0.05
       --output memorization_kfac/metrics/validation_table1_7b.json
     deps:
       - memorization_kfac/evaluations/validate_paper_results.py
-      - memorization_kfac/metrics/kfac_eval_results.json
+      - memorization_kfac/metrics/kfac_eval_log_7b_table1_7b.jsonl
     metrics:
       - memorization_kfac/metrics/validation_table1_7b.json:
           cache: false
@@ -235,13 +237,13 @@ stages:
   validate_table1_1b:
     cmd: >-
       python memorization_kfac/evaluations/validate_paper_results.py
-      --results-file memorization_kfac/metrics/kfac_eval_results.json
+      --results-file memorization_kfac/metrics/kfac_eval_log_1b_table1_1b.jsonl
       --model-size 1b
       --tolerance 0.05
       --output memorization_kfac/metrics/validation_table1_1b.json
     deps:
       - memorization_kfac/evaluations/validate_paper_results.py
-      - memorization_kfac/metrics/kfac_eval_results.json
+      - memorization_kfac/metrics/kfac_eval_log_1b_table1_1b.jsonl
     metrics:
       - memorization_kfac/metrics/validation_table1_1b.json:
           cache: false
