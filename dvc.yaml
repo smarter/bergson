@@ -60,272 +60,74 @@ stages:
       (gradient covariance) for MLP projections in target layers.
 
   # =============================================================================
-  # K-FAC Weight Editing (Paper Section 5, Table 1)
+  # K-FAC Weight Editing & Evaluation (Paper Section 5, Table 1)
   # =============================================================================
   # Reproduces Table 1: "In LMs we edit layers 23, 24, and 25 at 60% energy
   # retained in the up and gate projections in MLPs."
+  #
+  # Uses eval_mem_kfac.py which:
+  # - Applies K-FAC edits to specified layers
+  # - Evaluates memorization (Dolma & Quotes datasets)
+  # - Computes perplexity and nDCG@10
+  # - Saves edited model
 
-  apply_kfac_edit_7b:
+  paper_table1_7b:
     cmd: >-
-      python memorization_kfac/evaluations/apply_kfac_edit.py
-      --model ${model.name}
-      --kfac_dir "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
-      --output_dir memorization_kfac/models/kfac_edited_7b
-      --layers 23 24 25
-      --energy_threshold 0.60
-      --projections up gate
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size 7b
+      --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      --use-cache
+      --perplexity
+      --results-tag table1_7b
     deps:
-      - memorization_kfac/evaluations/apply_kfac_edit.py
-      - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
-    params:
-      - model.name
-      - model.size
-    outs:
-      - memorization_kfac/models/kfac_edited_7b
-    desc: |
-      Paper Table 1 (Section 5.2): Apply K-FAC edit to OLMo-2 7B.
-      Settings from Appendix D.1: "In LMs we edit layers 23, 24, and 25
-      at 60% energy retained in the up and gate projections in MLPs."
-      This produces the K-FAC edited model evaluated in Table 1.
-
-  apply_kfac_edit_1b:
-    cmd: >-
-      python memorization_kfac/evaluations/apply_kfac_edit.py
-      --model ${model.name}
-      --kfac_dir "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
-      --output_dir memorization_kfac/models/kfac_edited_1b
-      --layers ${kfac_edit.layers_1b}
-      --energy_threshold ${kfac_edit.energy_1b}
-      --projections up gate
-    deps:
-      - memorization_kfac/evaluations/apply_kfac_edit.py
-      - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
-    params:
-      - model.name
-      - model.size
-      - kfac_edit.layers_1b
-      - kfac_edit.energy_1b
-    outs:
-      - memorization_kfac/models/kfac_edited_1b
-    desc: |
-      Paper Table 1 (Appendix F): Apply K-FAC edit to OLMo-2 1B.
-      Settings for 1B model from supplementary materials.
-
-  # =============================================================================
-  # Memorization Dataset Generation (Paper Appendix B)
-  # =============================================================================
-  # Reproduces: "Fixed-length windows [64 | 48] are sampled per document and
-  # a window is labeled memorized iff the teacher-forced argmax at each of
-  # the 48 suffix positions equals the gold token."
-
-  mine_dolma_memorization_7b:
-    cmd: >-
-      python memorization_kfac/data/mine_memorized_sequences.py
-      --model ${model.name}
-      --corpus dolma
-      --prefix_len 64
-      --suffix_len 48
-      --n_sequences 1000
-      --output memorization_kfac/data/dolma_memorized_7b.json
-      --split_ratio 0.5
-    deps:
-      - memorization_kfac/data/mine_memorized_sequences.py
-    params:
-      - model.name
-    outs:
-      - memorization_kfac/data/dolma_memorized_7b.json
-      - memorization_kfac/data/dolma_memorized_7b_train.json
-      - memorization_kfac/data/dolma_memorized_7b_val.json
-    desc: |
-      Paper Appendix B (Dolma dataset): Mine 1000 memorized sequences from Dolma.
-      "Fixed-length windows [64 | 48] are sampled per document and a window is
-      labeled memorized iff the teacher-forced argmax at each of the 48 suffix
-      positions equals the gold token."
-      Split: 500 train, 500 validation (used in Table 1).
-
-  mine_dolma_memorization_1b:
-    cmd: >-
-      python memorization_kfac/data/mine_memorized_sequences.py
-      --model ${model.name}
-      --corpus dolma
-      --prefix_len 64
-      --suffix_len 48
-      --n_sequences 650
-      --output memorization_kfac/data/dolma_memorized_1b.json
-      --split_ratio 0.81
-    deps:
-      - memorization_kfac/data/mine_memorized_sequences.py
-    params:
-      - model.name
-    outs:
-      - memorization_kfac/data/dolma_memorized_1b.json
-      - memorization_kfac/data/dolma_memorized_1b_train.json
-      - memorization_kfac/data/dolma_memorized_1b_val.json
-    desc: |
-      Paper Appendix F: Mine 650 memorized sequences from Dolma for 1B model.
-      "We split the 650 Dolma sequences into 525 train and 125 validation."
-
-  mine_historical_quotes_7b:
-    cmd: >-
-      python memorization_kfac/data/mine_historical_quotes.py
-      --model ${model.name}
-      --suffix_len 8
-      --n_sequences 512
-      --output memorization_kfac/data/historical_quotes_7b.json
-    deps:
-      - memorization_kfac/data/mine_historical_quotes.py
-    params:
-      - model.name
-    outs:
-      - memorization_kfac/data/historical_quotes_7b.json
-    desc: |
-      Paper Appendix B (Historical Quotes): Mine 512 memorized historical quotes.
-      "For each quote (length ≥9 tokens), the prefix is all but the last 8 tokens
-      and the suffix is the final 8. We greedily generate 8 tokens from the prefix
-      and mark memorized on exact match."
-
-  mine_historical_quotes_1b:
-    cmd: >-
-      python memorization_kfac/data/mine_historical_quotes.py
-      --model ${model.name}
-      --suffix_len 8
-      --n_sequences 664
-      --output memorization_kfac/data/historical_quotes_1b.json
-    deps:
-      - memorization_kfac/data/mine_historical_quotes.py
-    params:
-      - model.name
-    outs:
-      - memorization_kfac/data/historical_quotes_1b.json
-    desc: |
-      Paper Appendix F: Mine 664 memorized historical quotes for 1B model.
-
-  # =============================================================================
-  # Memorization Suppression Evaluation (Paper Table 1, Section 5.2)
-  # =============================================================================
-  # Reproduces Table 1 results: Strict/Loose accuracy, Levenshtein distance
-
-  eval_memorization_baseline_7b:
-    cmd: >-
-      python memorization_kfac/evaluations/eval_memorization.py
-      --model ${model.name}
-      --dolma_data memorization_kfac/data/dolma_memorized_7b_val.json
-      --quotes_data memorization_kfac/data/historical_quotes_7b.json
-      --output memorization_kfac/metrics/memorization_baseline_7b.json
-    deps:
-      - memorization_kfac/evaluations/eval_memorization.py
-      - memorization_kfac/data/dolma_memorized_7b_val.json
-      - memorization_kfac/data/historical_quotes_7b.json
-    params:
-      - model.name
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - "memorization_kfac/data/kfac_factors/olmo2_7b"
     metrics:
-      - memorization_kfac/metrics/memorization_baseline_7b.json:
+      - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
     desc: |
-      Paper Table 1 (Baseline row): Evaluate baseline memorization on OLMo-2 7B.
-      Expected results: Dolma Val Strict: 99.9%, Hist. Quotes Strict: 99.9%
+      Paper Table 1 (7B model, all columns): Apply K-FAC edit and evaluate.
 
-  eval_memorization_kfac_7b:
-    cmd: >-
-      python memorization_kfac/evaluations/eval_memorization.py
-      --model memorization_kfac/models/kfac_edited_7b
-      --dolma_data memorization_kfac/data/dolma_memorized_7b_val.json
-      --quotes_data memorization_kfac/data/historical_quotes_7b.json
-      --output memorization_kfac/metrics/memorization_kfac_7b.json
-    deps:
-      - memorization_kfac/evaluations/eval_memorization.py
-      - memorization_kfac/models/kfac_edited_7b
-      - memorization_kfac/data/dolma_memorized_7b_val.json
-      - memorization_kfac/data/historical_quotes_7b.json
-    metrics:
-      - memorization_kfac/metrics/memorization_kfac_7b.json:
-          cache: false
-    desc: |
-      Paper Table 1 (K-FAC row): Evaluate K-FAC edited model on memorization.
-      Expected results: Dolma Val Strict: 3.4%, Hist. Quotes Strict: 16.1%,
-      measuring suppression of verbatim recitation.
+      Settings (Appendix D.1): Layers 23-25 at 60% energy in up/gate projections.
 
-  eval_memorization_baseline_1b:
+      Expected results (Table 1, K-FAC row):
+      - Dolma Val Strict: 3.4% (down from 99.9% baseline)
+      - Dolma Val Loose: 8.8%
+      - Dolma Avg Lev: 0.704
+      - Historical Quotes Strict: 16.1% (down from 99.9% baseline)
+      - Historical Quotes Loose: 23.8%
+      - Historical Quotes Avg Lev: 0.625
+      - Pile 10k Perplexity: 22.84 (up from 19.04 baseline)
+
+      Also computes: nDCG@10 (expected: 0.91)
+
+  paper_table1_1b:
     cmd: >-
-      python memorization_kfac/evaluations/eval_memorization.py
-      --model ${model.name}
-      --dolma_data memorization_kfac/data/dolma_memorized_1b_val.json
-      --quotes_data memorization_kfac/data/historical_quotes_1b.json
-      --output memorization_kfac/metrics/memorization_baseline_1b.json
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size 1b
+      --layers-json ${kfac_edit.layers_config_1b}
+      --use-cache
+      --perplexity
+      --results-tag table1_1b
     deps:
-      - memorization_kfac/evaluations/eval_memorization.py
-      - memorization_kfac/data/dolma_memorized_1b_val.json
-      - memorization_kfac/data/historical_quotes_1b.json
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - "memorization_kfac/data/kfac_factors/olmo2_1b"
     params:
-      - model.name
+      - kfac_edit.layers_config_1b
     metrics:
-      - memorization_kfac/metrics/memorization_baseline_1b.json:
+      - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
     desc: |
-      Paper Appendix F (Table 5, Baseline row): Evaluate baseline OLMo-2 1B.
-      Expected results: Dolma Val Strict: 98.46%, Hist. Quotes Strict: 98.5%
+      Paper Table 5 (Appendix F, 1B model): Apply K-FAC edit and evaluate.
 
-  eval_memorization_kfac_1b:
-    cmd: >-
-      python memorization_kfac/evaluations/eval_memorization.py
-      --model memorization_kfac/models/kfac_edited_1b
-      --dolma_data memorization_kfac/data/dolma_memorized_1b_val.json
-      --quotes_data memorization_kfac/data/historical_quotes_1b.json
-      --output memorization_kfac/metrics/memorization_kfac_1b.json
-    deps:
-      - memorization_kfac/evaluations/eval_memorization.py
-      - memorization_kfac/models/kfac_edited_1b
-      - memorization_kfac/data/dolma_memorized_1b_val.json
-      - memorization_kfac/data/historical_quotes_1b.json
-    metrics:
-      - memorization_kfac/metrics/memorization_kfac_1b.json:
-          cache: false
-    desc: |
-      Paper Appendix F (Table 5, K-FAC row): Evaluate K-FAC edited 1B model.
-      Expected results: Dolma Val Strict: 2.8%, Hist. Quotes Strict: 27.7%
-
-  # =============================================================================
-  # Perplexity Evaluation (Paper Table 1, Section 5.2)
-  # =============================================================================
-  # Reproduces: "We compute perplexity on the first 200k tokens of the
-  # held-out pile10k dataset"
-
-  eval_perplexity_baseline_7b:
-    cmd: >-
-      python memorization_kfac/evaluations/eval_perplexity.py
-      --model ${model.name}
-      --data_path memorization_kfac/data/pile10k.txt
-      --max_tokens 200000
-      --output memorization_kfac/metrics/perplexity_baseline_7b.json
-    deps:
-      - memorization_kfac/evaluations/eval_perplexity.py
-      - memorization_kfac/data/pile10k.txt
-    params:
-      - model.name
-    metrics:
-      - memorization_kfac/metrics/perplexity_baseline_7b.json:
-          cache: false
-    desc: |
-      Paper Table 1: Compute perplexity on Pile 10k for baseline OLMo-2 7B.
-      Expected result: 19.04 (from Table 1, Baseline row)
-
-  eval_perplexity_kfac_7b:
-    cmd: >-
-      python memorization_kfac/evaluations/eval_perplexity.py
-      --model memorization_kfac/models/kfac_edited_7b
-      --data_path memorization_kfac/data/pile10k.txt
-      --max_tokens 200000
-      --output memorization_kfac/metrics/perplexity_kfac_7b.json
-    deps:
-      - memorization_kfac/evaluations/eval_perplexity.py
-      - memorization_kfac/models/kfac_edited_7b
-      - memorization_kfac/data/pile10k.txt
-    metrics:
-      - memorization_kfac/metrics/perplexity_kfac_7b.json:
-          cache: false
-    desc: |
-      Paper Table 1: Compute perplexity on Pile 10k for K-FAC edited 7B.
-      Expected result: 22.84 (from Table 1, K-FAC row)
+      Expected results (Table 5, K-FAC row):
+      - Dolma Val Strict: 2.8% (down from 98.46% baseline)
+      - Dolma Val Loose: 7.2%
+      - Dolma Avg Lev: 0.761
+      - Historical Quotes Strict: 27.7% (down from 98.5% baseline)
+      - Historical Quotes Loose: 39.9%
+      - Historical Quotes Avg Lev: 0.470
+      - Pile 10k Perplexity: 26.53 (up from 23.19 baseline)
 
   # =============================================================================
   # Benchmark Evaluations (Paper Section 6, Tables 8-10, Appendix I)
