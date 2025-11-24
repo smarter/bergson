@@ -105,20 +105,22 @@ stages:
     cmd: >-
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 1b
-      --layers-json ${kfac_edit.layers_config_1b}
+      --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
       --use-cache
       --perplexity
       --results-tag table1_1b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - "memorization_kfac/data/kfac_factors/olmo2_1b"
-    params:
-      - kfac_edit.layers_config_1b
     metrics:
       - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
     desc: |
       Paper Table 5 (Appendix F, 1B model): Apply K-FAC edit and evaluate.
+
+      Settings: Layers 13-15 (late layers, similar to 7B) at 60% energy
+      in up/gate projections. Note: Paper doesn't specify exact 1B settings,
+      using equivalent to 7B (late layers, 60% energy).
 
       Expected results (Table 5, K-FAC row):
       - Dolma Val Strict: 2.8% (down from 98.46% baseline)
