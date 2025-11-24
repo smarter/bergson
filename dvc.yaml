@@ -6,6 +6,65 @@ stages:
   # up_proj, down_proj) by streaming ~20M tokens from Dolmino/OLMo mixtures
   # with sequence length 512 under next-token cross-entropy."
 
+  collect_kfac_paper_7b:
+    cmd:
+      - python memorization_kfac/data/collect_kfac_multilayer.py
+        --model allenai/OLMo-2-1124-7B
+        --device cuda
+        --dtype bfloat16
+        --corpus dolmo
+        --nbytes 100000000
+        --seq_len 512
+        --batch_size 32
+        --layers_per_pass 1
+        --target_blocks 23 24 25
+        --save_dir memorization_kfac/data/kfac_factors_paper/olmo2_7b
+    deps:
+      - memorization_kfac/data/collect_kfac_multilayer.py
+    outs:
+      - memorization_kfac/data/kfac_factors_paper/olmo2_7b
+    desc: |
+      Paper Section 3.2 (7B model): Collect K-FAC factors for Table 1 reproduction.
+
+      Settings from paper:
+      - Model: OLMo-2 7B
+      - Layers: 23, 24, 25 (to be edited at 60% energy)
+      - Data: ~100MB (~20M tokens) from Dolmino/OLMo mixtures
+      - Sequence length: 512
+      - Corpus: dolmo
+
+      Computes A = E[aa^T] and G = E[gg^T] for gate_proj, up_proj, down_proj
+      in each target layer.
+
+  collect_kfac_paper_1b:
+    cmd:
+      - python memorization_kfac/data/collect_kfac_multilayer.py
+        --model allenai/OLMo-2-0425-1B
+        --device cuda
+        --dtype bfloat16
+        --corpus dolmo
+        --nbytes 100000000
+        --seq_len 512
+        --batch_size 32
+        --layers_per_pass 1
+        --target_blocks 13 14 15
+        --save_dir memorization_kfac/data/kfac_factors_paper/olmo2_1b
+    deps:
+      - memorization_kfac/data/collect_kfac_multilayer.py
+    outs:
+      - memorization_kfac/data/kfac_factors_paper/olmo2_1b
+    desc: |
+      Paper Table 5/Appendix F (1B model): Collect K-FAC factors for reproduction.
+
+      Settings:
+      - Model: OLMo-2 1B
+      - Layers: 13, 14, 15 (late layers, equivalent to 7B's 23-25)
+      - Data: ~100MB (~20M tokens) from Dolmino/OLMo mixtures
+      - Sequence length: 512
+      - Corpus: dolmo
+
+  # --- Development/experimental K-FAC collection tasks ---
+
   collect_kfac_bergson:
     cmd: >-
       python memorization_kfac/data/collect_kfac_bergson.py
@@ -31,10 +90,8 @@ stages:
     outs:
       - memorization_kfac/data/kfac_factors_bergson
     desc: |
-      Paper Section 3.2: Collect K-FAC factors using bergson's implementation.
-      Streams ~20M tokens (--nbytes 100000000) from Dolmino/OLMo mixtures
-      with sequence length 512. Computes activation (A) and gradient (G)
-      covariance matrices for MLP projections.
+      Development: Collect K-FAC factors using bergson's implementation.
+      Uses parameters from params.yaml for experimentation.
 
   collect_kfac_factors:
     cmd:
@@ -55,9 +112,8 @@ stages:
     outs:
       - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
     desc: |
-      Paper Section 3.2: Original K-FAC collection implementation.
-      Collects A = E[aa^T] (activation covariance) and G = E[gg^T]
-      (gradient covariance) for MLP projections in target layers.
+      Development: Original K-FAC collection implementation.
+      Uses parameters from params.yaml for experimentation.
 
   # =============================================================================
   # K-FAC Weight Editing & Evaluation (Paper Section 5, Table 1)
@@ -81,7 +137,7 @@ stages:
       --results-tag table1_7b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
-      - "memorization_kfac/data/kfac_factors/olmo2_7b"
+      - memorization_kfac/data/kfac_factors_paper/olmo2_7b
     metrics:
       - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
@@ -111,7 +167,7 @@ stages:
       --results-tag table1_1b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
-      - "memorization_kfac/data/kfac_factors/olmo2_1b"
+      - memorization_kfac/data/kfac_factors_paper/olmo2_1b
     metrics:
       - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
@@ -195,14 +251,14 @@ stages:
     cmd: >-
       python memorization_kfac/evaluations/plot_figure2_activation_ratios.py
       --model-size 7b
-      --kfac-dir memorization_kfac/data/kfac_factors/olmo2_7b
+      --kfac-dir memorization_kfac/data/kfac_factors_paper/olmo2_7b
       --projection up
       --n-samples 100
       --batch-size 8
       --output-dir memorization_kfac/plots/figure2_7b
     deps:
       - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
-      - memorization_kfac/data/kfac_factors/olmo2_7b
+      - memorization_kfac/data/kfac_factors_paper/olmo2_7b
     plots:
       - memorization_kfac/plots/figure2_7b:
           cache: false
@@ -233,14 +289,14 @@ stages:
     cmd: >-
       python memorization_kfac/evaluations/plot_figure2_activation_ratios.py
       --model-size 1b
-      --kfac-dir memorization_kfac/data/kfac_factors/olmo2_1b
+      --kfac-dir memorization_kfac/data/kfac_factors_paper/olmo2_1b
       --projection up
       --n-samples 100
       --batch-size 8
       --output-dir memorization_kfac/plots/figure2_1b
     deps:
       - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
-      - memorization_kfac/data/kfac_factors/olmo2_1b
+      - memorization_kfac/data/kfac_factors_paper/olmo2_1b
     plots:
       - memorization_kfac/plots/figure2_1b:
           cache: false
