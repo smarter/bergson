@@ -1,24 +1,24 @@
 # Model Configuration
 model:
-  name: "allenai/OLMo-2-0425-1B"
-  size: "1b"
+  name: "allenai/OLMo-2-1124-7B"
+  size: "7b"
 
 # K-FAC Collection Parameters
 collect_kfac:
   # Hardware settings
   device: "cuda"
-  dtype: "bfloat16"  # choices: float32, bfloat16
+  dtype: "float32"  # choices: float32, bfloat16
 
   # Data settings
   corpus: "dolmo"  # choices: olmo, dolmo
   # nbytes: 10000000  # ~10MB of text data (~2M tokens) for comparison
   nbytes: 100000
   seq_len: 512
-  batch_size: 16  # Increased for more efficient processing
+  batch_size: 4 #8 #16  # Increased for more efficient processing
 
   # Layer processing
   layers_per_pass: 1  # Process this many layers before flushing
-  target_blocks: "10 14 15"  # Multiple layers for better comparison coverage
+  target_blocks: "23 24 25"  # Multiple layers for better comparison coverage
 
   # Optional: use multinomial-sampled labels instead of gold labels
   sample_labels: ""  # Set to "--sample-labels" to enable
