@@ -139,6 +139,73 @@ stages:
 
       If implementations match, relative errors should be very small (<1%).
 
+  collect_kfac_paper_1b_bergson:
+    cmd:
+      - python memorization_kfac/data/collect_kfac_bergson.py
+        --model allenai/OLMo-2-0425-1B
+        --device cuda
+        --dtype bfloat16
+        --corpus dolmo
+        --nbytes 100000000
+        --seq_len 512
+        --batch_size 32
+        --layers_per_pass 1
+        --target_blocks 13 14 15
+        --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
+        --kfac-only
+    deps:
+      - memorization_kfac/data/collect_kfac_bergson.py
+      - bergson/hessians/collector.py
+      - bergson/hessians/sharded_computation.py
+    outs:
+      - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
+    desc: |
+      Paper Table 5 (1B model): Collect K-FAC factors using BERGSON implementation.
+
+      Same parameters as collect_kfac_paper_1b but using bergson's collector.
+      Used to validate bergson implementation matches original.
+
+      Settings:
+      - Model: OLMo-2 1B
+      - Layers: 13, 14, 15 (late layers, equivalent to 7B's 23-25)
+      - Data: ~100MB (~20M tokens) from Dolmino/OLMo mixtures
+      - --kfac-only: Use KFAC (no eigenvalue correction)
+
+  convert_bergson_paper_1b:
+    cmd: >-
+      python memorization_kfac/data/convert_bergson_to_original.py
+      --bergson_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
+      --output_dir memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_1b
+    deps:
+      - memorization_kfac/data/convert_bergson_to_original.py
+      - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
+    outs:
+      - memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_1b
+    desc: |
+      Convert bergson paper 1B K-FAC output to original format for comparison.
+      Handles key mapping, normalization, and format conversion.
+
+  compare_kfac_paper_1b:
+    cmd: >-
+      python memorization_kfac/data/compare_kfac_implementations.py
+      --original_dir memorization_kfac/data/kfac_factors_paper/olmo2_1b
+      --bergson_converted_dir memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_1b
+      --output_json memorization_kfac/metrics/kfac_comparison_paper_1b.json
+    deps:
+      - memorization_kfac/data/compare_kfac_implementations.py
+      - memorization_kfac/data/kfac_factors_paper/olmo2_1b
+      - memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_1b
+    metrics:
+      - memorization_kfac/metrics/kfac_comparison_paper_1b.json:
+          cache: false
+    desc: |
+      Compare K-FAC factors from original vs bergson implementations (1B paper settings).
+
+      Uses paper parameters (layers 13-15, 100MB dolmo corpus) to validate
+      that bergson's implementation produces equivalent results.
+
+      If implementations match, relative errors should be very small (<1%).
+
   # --- Development/experimental K-FAC collection tasks ---
 
   collect_kfac_bergson:
