@@ -36,7 +36,7 @@ stages:
     cmd:
       - python memorization_kfac/data/collect_kfac_multilayer.py
         --model ${model.name}
-        --device cpu
+        --device ${collect_kfac.device}
         --dtype ${collect_kfac.dtype}
         --corpus ${collect_kfac.corpus}
         --nbytes ${collect_kfac.nbytes}
@@ -105,8 +105,7 @@ stages:
     params:
       - model.size
     metrics:
-      - memorization_kfac/metrics/kfac_comparison_results.json:
-          cache: false
+      - memorization_kfac/metrics/kfac_comparison_results.json
     desc: |
       Compare K-FAC factors from original and bergson implementations.
       Computes similarity metrics:
