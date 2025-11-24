@@ -11,14 +11,13 @@ collect_kfac:
 
   # Data settings
   corpus: "dolmo"  # choices: olmo, dolmo
-  # nbytes: 100000000  # ~100MB of text data
-  nbytes: 10000
+  nbytes: 10000000  # ~10MB of text data (~2M tokens) for comparison
   seq_len: 512
-  batch_size: 4 #8 #32
+  batch_size: 16  # Increased for more efficient processing
 
   # Layer processing
   layers_per_pass: 1  # Process this many layers before flushing
-  target_blocks: "14"  # Space-separated block IDs (e.g., "14" or "14 15 16")
+  target_blocks: "10 14 15"  # Multiple layers for better comparison coverage
 
   # Optional: use multinomial-sampled labels instead of gold labels
   sample_labels: ""  # Set to "--sample-labels" to enable
