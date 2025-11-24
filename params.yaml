@@ -11,7 +11,8 @@ collect_kfac:
 
   # Data settings
   corpus: "dolmo"  # choices: olmo, dolmo
-  nbytes: 10000000  # ~10MB of text data (~2M tokens) for comparison
+  # nbytes: 10000000  # ~10MB of text data (~2M tokens) for comparison
+  nbytes: 100000
   seq_len: 512
   batch_size: 16  # Increased for more efficient processing
 

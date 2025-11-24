@@ -90,32 +90,57 @@ def parse_args():
 
 
 def extract_metrics_from_results(results: Dict[str, Any]) -> Dict[str, float]:
-    """Extract relevant metrics from eval_mem_kfac.py output."""
+    """Extract relevant metrics from eval_mem_kfac.py output.
+
+    Handles both nested JSON format and flattened JSONL format.
+    """
     metrics = {}
 
-    # Memorization metrics (Dolma dataset)
-    if "memorization" in results:
-        mem = results["memorization"]
-        metrics["dolma_strict_acc"] = mem.get("strict_acc", None)
-        metrics["dolma_loose_acc"] = mem.get("loose_acc", None)
-        metrics["dolma_avg_lev"] = mem.get("avg_levenshtein_norm", None)
+    # Check if this is flattened JSONL format (with kfac_ prefix)
+    if "kfac_mem_strict_acc" in results:
+        # Flattened JSONL format
+        metrics["dolma_strict_acc"] = results.get("kfac_mem_strict_acc", None)
+        metrics["dolma_loose_acc"] = results.get("kfac_mem_loose_acc", None)
+        metrics["dolma_avg_lev"] = results.get("kfac_mem_avg_levenshtein_norm", None)
 
-    # Quotes metrics
-    if "quotes" in results:
-        quotes = results["quotes"]
-        metrics["quotes_strict_acc"] = quotes.get("strict_acc", None)
-        metrics["quotes_loose_acc"] = quotes.get("loose_acc", None)
-        metrics["quotes_avg_lev"] = quotes.get("avg_levenshtein_norm", None)
+        metrics["quotes_strict_acc"] = results.get("kfac_quotes_strict_acc", None)
+        metrics["quotes_loose_acc"] = results.get("kfac_quotes_loose_acc", None)
+        metrics["quotes_avg_lev"] = results.get("kfac_quotes_avg_levenshtein_norm", None)
 
-    # Perplexity
-    if "kfac_perplexity_bsn_post" in results:
-        metrics["perplexity"] = results["kfac_perplexity_bsn_post"]
-    elif "perplexity" in results:
-        metrics["perplexity"] = results["perplexity"]
+        # Perplexity - prefer BSN-style if available
+        if "kfac_perplexity_bsn_post" in results:
+            metrics["perplexity"] = results["kfac_perplexity_bsn_post"]
+        elif "kfac_perplexity" in results:
+            metrics["perplexity"] = results["kfac_perplexity"]
 
-    # nDCG@10
-    if "ndcg" in results:
-        metrics["ndcg"] = results["ndcg"]
+        # nDCG@10
+        if "kfac_ndcg@10" in results:
+            metrics["ndcg"] = results["kfac_ndcg@10"]
+    else:
+        # Nested JSON format (legacy)
+        # Memorization metrics (Dolma dataset)
+        if "memorization" in results:
+            mem = results["memorization"]
+            metrics["dolma_strict_acc"] = mem.get("strict_acc", None)
+            metrics["dolma_loose_acc"] = mem.get("loose_acc", None)
+            metrics["dolma_avg_lev"] = mem.get("avg_levenshtein_norm", None)
+
+        # Quotes metrics
+        if "quotes" in results:
+            quotes = results["quotes"]
+            metrics["quotes_strict_acc"] = quotes.get("strict_acc", None)
+            metrics["quotes_loose_acc"] = quotes.get("loose_acc", None)
+            metrics["quotes_avg_lev"] = quotes.get("avg_levenshtein_norm", None)
+
+        # Perplexity
+        if "kfac_perplexity_bsn_post" in results:
+            metrics["perplexity"] = results["kfac_perplexity_bsn_post"]
+        elif "perplexity" in results:
+            metrics["perplexity"] = results["perplexity"]
+
+        # nDCG@10
+        if "ndcg" in results:
+            metrics["ndcg"] = results["ndcg"]
 
     return metrics
 
@@ -270,12 +295,24 @@ def main():
         print(f"Error: Results file not found: {args.results_file}", file=sys.stderr)
         sys.exit(1)
 
-    with open(args.results_file, "r") as f:
-        results = json.load(f)
+    # Handle both JSON and JSONL formats
+    if args.results_file.suffix == ".jsonl":
+        # Read last line from JSONL file
+        with open(args.results_file, "r") as f:
+            lines = [line for line in f if line.strip()]
+            if not lines:
+                print(f"Error: Results file is empty: {args.results_file}", file=sys.stderr)
+                sys.exit(1)
+            results = json.loads(lines[-1])
+    else:
+        # Read JSON file
+        with open(args.results_file, "r") as f:
+            results = json.load(f)
 
     # Determine whether this is baseline or K-FAC results
-    # K-FAC results will have layer_config, baseline won't
-    is_kfac = "layer_config" in results and results["layer_config"]
+    # K-FAC results will have layer_config/layers, baseline won't
+    is_kfac = ("layer_config" in results and results["layer_config"]) or \
+              ("layers" in results and results["layers"])
     result_type = "kfac" if is_kfac else "baseline"
 
     print(f"Validating {result_type.upper()} results for {args.model_size.upper()} model")
