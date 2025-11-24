@@ -37,6 +37,11 @@ class HookCollectorBase(ContextDecorator, ABC):
     Set of module names to attach hooks to. Should consist only of nn.Linear modules.
     If None, hooks are attached to all Linear layers in the model.
     """
+    slice_for_lm: bool = False
+    """
+    If True, slices activations and gradients to [:, :-1] for language modeling.
+    This excludes the last sequence position which has no loss target in next-token prediction.
+    """
 
     @staticmethod
     def discover_targets(
@@ -105,6 +110,10 @@ class HookCollectorBase(ContextDecorator, ABC):
         x = inp[0].detach()
         assert x.ndim == 3, f"Expected input of shape [N, S, I], got {x.shape}"
 
+        # Slice for language modeling if requested (exclude last position)
+        if self.slice_for_lm:
+            x = x[:, :-1]
+
         self.forward_hook(name, x)
 
     def _process_grad(self, module: nn.Module, _, grad_out):
@@ -112,6 +121,10 @@ class HookCollectorBase(ContextDecorator, ABC):
         assert isinstance(module, nn.Linear), "Expected a Linear module"
         name = assert_type(str, module._name)
         g = grad_out[0].detach()  # [N, S, O]
+
+        # Slice for language modeling if requested (exclude last position)
+        if self.slice_for_lm:
+            g = g[:, :-1]
 
         self.backward_hook(name, g)
 
