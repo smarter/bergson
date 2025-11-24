@@ -129,6 +129,8 @@ stages:
 
   paper_table1_7b:
     cmd: >-
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper
+      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_7b
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 7b
       --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
@@ -138,6 +140,9 @@ stages:
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - memorization_kfac/data/kfac_factors_paper/olmo2_7b
+    outs:
+      - memorization_kfac/cache/kfac_weights_paper_7b:
+          cache: true
     metrics:
       - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
@@ -159,6 +164,8 @@ stages:
 
   paper_table1_1b:
     cmd: >-
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper
+      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_1b
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 1b
       --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
@@ -168,6 +175,9 @@ stages:
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - memorization_kfac/data/kfac_factors_paper/olmo2_1b
+    outs:
+      - memorization_kfac/cache/kfac_weights_paper_1b:
+          cache: true
     metrics:
       - memorization_kfac/metrics/kfac_eval_results.json:
           cache: false
