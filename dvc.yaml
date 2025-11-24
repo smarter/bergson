@@ -186,6 +186,69 @@ stages:
       Flags metrics with >5% relative error as issues.
 
   # =============================================================================
+  # Figure 2: K-FAC Eigenvector Activation Ratios (Paper Section 4)
+  # =============================================================================
+  # Reproduces Figure 2: "K-FAC shows a more salient divergence between
+  # different parts of the eigenspectrum on memorized and clean data."
+
+  plot_figure2_7b:
+    cmd: >-
+      python memorization_kfac/evaluations/plot_figure2_activation_ratios.py
+      --model-size 7b
+      --kfac-dir memorization_kfac/data/kfac_factors/olmo2_7b
+      --projection up
+      --n-samples 100
+      --batch-size 8
+      --output-dir memorization_kfac/plots/figure2_7b
+    deps:
+      - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
+      - memorization_kfac/data/kfac_factors/olmo2_7b
+    plots:
+      - memorization_kfac/plots/figure2_7b:
+          cache: false
+    desc: |
+      Paper Figure 2 (Section 4): K-FAC eigenvector activation ratios for 7B model.
+
+      Methodology:
+      - Load pre-computed K-FAC factors (A and G matrices)
+      - Order A's eigenvectors by FIM: Σ_i λ_i^G * λ_j^A
+      - Collect activations on memorized vs clean data (no gradients)
+      - Project activations onto eigenbasis of A
+      - Compute memorized/clean ratio for each percentile band
+
+      Plots 4 lines (percentile bands):
+      - Top 10% of eigenvectors
+      - 10-25% range
+      - 25-50% range
+      - Bottom 50%
+
+      X-axis: MLP layer
+      Y-axis: Memorized/Clean activation ratio
+
+      Expected (layer 22, from paper):
+      - Bottom 50%: 23.1% higher on memorized (ratio ≈ 1.231)
+      - Top 10%: 26% higher on clean (ratio ≈ 0.740)
+
+  plot_figure2_1b:
+    cmd: >-
+      python memorization_kfac/evaluations/plot_figure2_activation_ratios.py
+      --model-size 1b
+      --kfac-dir memorization_kfac/data/kfac_factors/olmo2_1b
+      --projection up
+      --n-samples 100
+      --batch-size 8
+      --output-dir memorization_kfac/plots/figure2_1b
+    deps:
+      - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
+      - memorization_kfac/data/kfac_factors/olmo2_1b
+    plots:
+      - memorization_kfac/plots/figure2_1b:
+          cache: false
+    desc: |
+      Paper Figure 2 (Section 4): K-FAC eigenvector activation ratios for 1B model.
+      Same analysis as 7B but for smaller model.
+
+  # =============================================================================
   # Benchmark Evaluations (Paper Section 6, Tables 8-10, Appendix I)
   # =============================================================================
   # Reproduces: "We use the OLMES evaluation suite to measure performance
