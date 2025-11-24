@@ -61,10 +61,15 @@ KFAC_FACTORS_1B = {
     (3, 4, 5): Path("olmo2_1b/kfac_out_olmo2_1b_3_4_5/kfac_factors_blk_3_4_5.pt"),
     (6, 7, 8, 9): Path("olmo2_1b/kfac_out_olmo2_1b_6_7_8_9/kfac_factors_blk_6_7_8_9.pt"),
     (10, 11, 12, 13): Path("olmo2_1b/kfac_out_olmo2_1b_10_11_12_13/kfac_factors_blk_10_11_12_13.pt"),
+    # Paper reproduction (Table 5): layers 13-15
+    (13, 14, 15): Path("olmo2_1b/kfac_factors_blk_13_14_15.pt"),
 }
 
 # 7B model K-FAC factors (relative paths)
 KFAC_FACTORS_7B = {
+    # Paper reproduction (Table 1): layers 23-25 (checked first for priority)
+    (23, 24, 25): Path("olmo2_7b/kfac_factors_blk_23_24_25.pt"),
+    # Legacy/development factors
     (0, 1, 3, 7): Path("olmo2_7b/kfac_out_olmo2_7b_0_1_3_7/kfac_factors_blk_0_1_3_7.pt"),
     (4, 12, 20, 28): Path("olmo2_7b/kfac_out_olmo2_7b_4_12_20_28/kfac_factors_blk_4_12_20_28.pt"),
     (8, 9, 24, 25): Path("olmo2_7b/kfac_out_olmo2_7b_8_9_24_25/kfac_factors_blk_8_9_24_25.pt"),
