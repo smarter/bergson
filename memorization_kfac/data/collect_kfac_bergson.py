@@ -165,7 +165,6 @@ class BergsonCovarianceCollector:
             shard_computer=self.shard_computer,
             rank=rank,
             path=str(save_dir),
-            slice_for_lm=True,  # Slice [:, :-1] to match original KFAC implementation
         )
 
         self.total_tokens = 0
