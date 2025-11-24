@@ -65,23 +65,12 @@ def compute_similarity_metrics(
     frob_A1 = torch.norm(A1, p="fro").item()
     rel_error = frob_diff / (frob_A1 + 1e-10)
 
-    # Cosine similarity (computed manually for numerical stability)
+    # Cosine similarity
     A1_flat = A1.flatten()
     A2_flat = A2.flatten()
-
-    # Compute dot product and norms
-    dot_product = torch.dot(A1_flat, A2_flat).item()
-    norm_A1 = torch.norm(A1_flat).item()
-    norm_A2 = torch.norm(A2_flat).item()
-
-    # Compute cosine similarity with safe division
-    if norm_A1 > 0 and norm_A2 > 0:
-        cos_sim = dot_product / (norm_A1 * norm_A2)
-        # Clamp to [-1, 1] to handle floating point errors
-        cos_sim = max(-1.0, min(1.0, cos_sim))
-    else:
-        # If either matrix is zero, cosine similarity is undefined
-        cos_sim = 0.0
+    cos_sim = torch.nn.functional.cosine_similarity(
+        A1_flat.unsqueeze(0), A2_flat.unsqueeze(0), dim=1
+    ).item()
 
     # Max absolute difference
     max_abs_diff = torch.max(torch.abs(diff)).item()
