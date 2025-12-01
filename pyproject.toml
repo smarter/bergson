@@ -68,5 +68,6 @@ dev = [
     "pre-commit-uv>=4.1.5",
     "pyright>=1.1.406",
     "pytest>=8.4.2",
+    "rapidfuzz>=3.14.3",
     "zstandard>=0.25.0",
 ]
