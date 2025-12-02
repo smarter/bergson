@@ -32,8 +32,8 @@ stages:
       size: 10093
     - path: memorization_kfac/data/collect_kfac_bergson.py
       hash: md5
-      md5: 30876b7d7d104f8b14d29e2248926858
-      size: 12513
+      md5: 6a294d7a3abf9775b36359dcd6be9eb9
+      size: 13546
     params:
       params.yaml:
         collect_kfac:
@@ -50,7 +50,7 @@ stages:
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: ce1e4e8047a6c4b787fb42f852224ee8.dir
+      md5: ad59dbfccd038ceda45ffcddd8469df2.dir
       size: 427819720
       nfiles: 3
   convert_bergson_to_original:
@@ -64,13 +64,13 @@ stages:
       size: 4382
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: ce1e4e8047a6c4b787fb42f852224ee8.dir
+      md5: ad59dbfccd038ceda45ffcddd8469df2.dir
       size: 427819720
       nfiles: 3
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: b81ff0fea9f01708644f1583ddcbb072.dir
+      md5: aab57787f6a907f944b3ac4e2b9400be.dir
       size: 855641125
       nfiles: 1
   compare_kfac_implementations:
@@ -102,3 +102,86 @@ stages:
       hash: md5
       md5: fd0f0b205158d003084d594c3d951d87
       size: 2434
+  collect_kfac_bergson_with_last_position:
+    cmd: 'python memorization_kfac/data/collect_kfac_bergson.py --model allenai/OLMo-2-0425-1B
+      --device cuda --dtype bfloat16 --corpus dolmo --nbytes 10000 --seq_len 512 --batch_size
+      4 --layers_per_pass 1 --target_blocks 13 --save_dir memorization_kfac/data/kfac_factors_bergson_with_last_pos
+      --kfac-only --include_last_position '
+    deps:
+    - path: bergson/hessians/collector.py
+      hash: md5
+      md5: 7ec4a98af76a1401e220d45af3713499
+      size: 12606
+    - path: bergson/hessians/sharded_computation.py
+      hash: md5
+      md5: 5b99ad2b95ef61ce034fe092f7f2f04e
+      size: 10093
+    - path: memorization_kfac/data/collect_kfac_bergson.py
+      hash: md5
+      md5: 6a294d7a3abf9775b36359dcd6be9eb9
+      size: 13546
+    params:
+      params.yaml:
+        collect_kfac.batch_size: 4
+        collect_kfac.corpus: dolmo
+        collect_kfac.device: cuda
+        collect_kfac.dtype: bfloat16
+        collect_kfac.layers_per_pass: 1
+        collect_kfac.nbytes: 10000
+        collect_kfac.sample_labels: ''
+        collect_kfac.seq_len: 512
+        collect_kfac.target_blocks: '13'
+        model.name: allenai/OLMo-2-0425-1B
+    outs:
+    - path: memorization_kfac/data/kfac_factors_bergson_with_last_pos
+      hash: md5
+      md5: 2a51d5052b2d6824ad6c2f4021bde374.dir
+      size: 427819720
+      nfiles: 3
+  convert_bergson_with_last_position:
+    cmd: python memorization_kfac/data/convert_bergson_to_original.py 
+      --bergson_dir memorization_kfac/data/kfac_factors_bergson_with_last_pos 
+      --output_dir 
+      memorization_kfac/data/kfac_factors_bergson_with_last_pos_converted
+    deps:
+    - path: memorization_kfac/data/convert_bergson_to_original.py
+      hash: md5
+      md5: c2bffaf209058f30d23e6758bac90b1f
+      size: 4382
+    - path: memorization_kfac/data/kfac_factors_bergson_with_last_pos
+      hash: md5
+      md5: 2a51d5052b2d6824ad6c2f4021bde374.dir
+      size: 427819720
+      nfiles: 3
+    outs:
+    - path: memorization_kfac/data/kfac_factors_bergson_with_last_pos_converted
+      hash: md5
+      md5: 49ca01f96e30a1de356862c3912845f9.dir
+      size: 855641125
+      nfiles: 1
+  compare_kfac_last_position:
+    cmd: python memorization_kfac/data/compare_kfac_implementations.py 
+      --original_dir memorization_kfac/data/kfac_factors_bergson_converted 
+      --bergson_converted_dir 
+      memorization_kfac/data/kfac_factors_bergson_with_last_pos_converted 
+      --output_json memorization_kfac/metrics/kfac_last_position_comparison.json
+    deps:
+    - path: memorization_kfac/data/compare_kfac_implementations.py
+      hash: md5
+      md5: 74436201c693beffb363e60f333133c9
+      size: 6833
+    - path: memorization_kfac/data/kfac_factors_bergson_converted
+      hash: md5
+      md5: aab57787f6a907f944b3ac4e2b9400be.dir
+      size: 855641125
+      nfiles: 1
+    - path: memorization_kfac/data/kfac_factors_bergson_with_last_pos_converted
+      hash: md5
+      md5: 49ca01f96e30a1de356862c3912845f9.dir
+      size: 855641125
+      nfiles: 1
+    outs:
+    - path: memorization_kfac/metrics/kfac_last_position_comparison.json
+      hash: md5
+      md5: 14d0b41eeb792a550d55077a964bd41c
+      size: 2448
