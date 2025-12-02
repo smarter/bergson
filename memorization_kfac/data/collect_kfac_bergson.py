@@ -31,6 +31,9 @@ class SlicedCovarianceCollector(CovarianceCollector):
     the original collect_kfac_multilayer.py implementation.
 
     Original uses: x = inp[0][:, :-1] and g = go[0][:, :-1]
+
+    NOTE: This requires gradient checkpointing to be DISABLED, otherwise
+    forward hooks fire multiple times causing double-counting.
     """
 
     def forward_hook(self, name: str, a: Tensor) -> None:
@@ -41,7 +44,7 @@ class SlicedCovarianceCollector(CovarianceCollector):
         a = a[:, :-1, :]
 
         # Reshape to [N*(S-1), I]
-        a_bi = a.reshape(-1, a.shape[-1])
+        a_bi = a.reshape(-1, a.shape[-1]).float()
 
         # Compute local covariance
         local_update_ii = a_bi.mT @ a_bi
@@ -66,7 +69,7 @@ class SlicedCovarianceCollector(CovarianceCollector):
         g = g[:, :-1, :]
 
         # Reshape to [N*(S-1), O]
-        g_bo = g.reshape(-1, g.shape[-1])
+        g_bo = g.reshape(-1, g.shape[-1]).float()
 
         # Compute local covariance
         local_update_oo = g_bo.mT @ g_bo
@@ -322,8 +325,9 @@ def main():
         trust_remote_code=True,
     )
 
-    # Enable gradient checkpointing
-    model.gradient_checkpointing_enable()
+    # Don't use gradient checkpointing - it causes forward hooks to fire multiple
+    # times which complicates covariance collection. Memory is less of a concern
+    # since we only process a few target layers.
     model.enable_input_require_grads()
     model.config.use_cache = False
     model.train()
