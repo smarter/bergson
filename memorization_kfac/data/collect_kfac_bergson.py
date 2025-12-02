@@ -125,6 +125,12 @@ def parse():
         help="Use KFAC (covariances only) instead of EKFAC (with eigenvalue correction). "
         "When enabled, only CovarianceCollector is used without LambdaCollector.",
     )
+    p.add_argument(
+        "--include_last_position",
+        action="store_true",
+        help="Include last sequence position in covariance computation. "
+        "By default, last position is excluded to match original K-FAC implementation.",
+    )
     return p.parse_args()
 
 
@@ -193,6 +199,7 @@ class BergsonCovarianceCollector:
         save_dir: pathlib.Path,
         dtype: torch.dtype,
         kfac_only: bool = True,
+        include_last_position: bool = False,
         rank: int = 0,
         world_size: int = 1,
     ):
@@ -202,6 +209,7 @@ class BergsonCovarianceCollector:
         self.save_dir = save_dir
         self.dtype = dtype
         self.kfac_only = kfac_only
+        self.include_last_position = include_last_position
         self.rank = rank
         self.world_size = world_size
 
@@ -223,8 +231,11 @@ class BergsonCovarianceCollector:
             target_info=self.target_info, lambda_damp_factor=1e-5
         )
 
-        # Create collector (using SlicedCovarianceCollector to match original's [:, :-1] slicing)
-        self.collector = SlicedCovarianceCollector(
+        # Choose collector based on include_last_position flag
+        # SlicedCovarianceCollector excludes last position (matches original K-FAC)
+        # CovarianceCollector includes all positions
+        collector_cls = CovarianceCollector if include_last_position else SlicedCovarianceCollector
+        self.collector = collector_cls(
             model=model.base_model,
             target_modules=self.target_modules,
             dtype=dtype,
@@ -345,6 +356,8 @@ def main():
     print(f"Using {method} method (kfac_only={args.kfac_only})")
     print(f"Processing blocks: {args.target_blocks}")
     print(f"Streaming ~{args.nbytes / 1e6:.0f}MB from {args.corpus}")
+    position_mode = "including" if args.include_last_position else "excluding"
+    print(f"Position slicing: {position_mode} last position")
 
     # Create streaming dataset with batching iterator
     streaming_ds = StreamingDataset(args.corpus, tokenizer, args.seq_len, args.nbytes)
@@ -369,6 +382,7 @@ def main():
         save_dir=args.save_dir,
         dtype=model.dtype,
         kfac_only=args.kfac_only,
+        include_last_position=args.include_last_position,
     )
 
     # Collect covariances with batched data
