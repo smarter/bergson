@@ -19,6 +19,69 @@ from tqdm.auto import tqdm
 from bergson.data import IndexConfig, DataConfig
 from bergson.hessians.collector import CovarianceCollector, HookCollectorBase
 from bergson.hessians.sharded_computation import ShardedMul
+import torch.distributed as dist
+from dataclasses import dataclass
+from torch import Tensor
+
+
+@dataclass(kw_only=True)
+class SlicedCovarianceCollector(CovarianceCollector):
+    """
+    CovarianceCollector that drops the last sequence position to match
+    the original collect_kfac_multilayer.py implementation.
+
+    Original uses: x = inp[0][:, :-1] and g = go[0][:, :-1]
+    """
+
+    def forward_hook(self, name: str, a: Tensor) -> None:
+        """Compute activation covariance: A^T @ A, dropping last position."""
+        A_cov_ki = self.A_cov_dict[name]
+
+        # Drop last position to match original implementation
+        a = a[:, :-1, :]
+
+        # Reshape to [N*(S-1), I]
+        a_bi = a.reshape(-1, a.shape[-1])
+
+        # Compute local covariance
+        local_update_ii = a_bi.mT @ a_bi
+
+        # All-reduce across ranks
+        if dist.is_initialized():
+            dist.all_reduce(local_update_ii, op=dist.ReduceOp.SUM)
+
+        # Extract our shard
+        start_row = self.rank * A_cov_ki.shape[0]
+        end_row = (self.rank + 1) * A_cov_ki.shape[0]
+        update_slice_ki = local_update_ii[start_row:end_row, :]
+
+        # Accumulate
+        A_cov_ki.add_(update_slice_ki)
+
+    def backward_hook(self, name: str, g: Tensor) -> None:
+        """Compute gradient covariance: G^T @ G, dropping last position."""
+        S_cov_po = self.S_cov_dict[name]
+
+        # Drop last position to match original implementation
+        g = g[:, :-1, :]
+
+        # Reshape to [N*(S-1), O]
+        g_bo = g.reshape(-1, g.shape[-1])
+
+        # Compute local covariance
+        local_update_oo = g_bo.mT @ g_bo
+
+        # All-reduce across ranks
+        if dist.is_initialized():
+            dist.all_reduce(local_update_oo, op=dist.ReduceOp.SUM)
+
+        # Extract our shard
+        start_row = self.rank * S_cov_po.shape[0]
+        end_row = (self.rank + 1) * S_cov_po.shape[0]
+        update_slice_po = local_update_oo[start_row:end_row, :]
+
+        # Accumulate
+        S_cov_po.add_(update_slice_po)
 
 
 def parse():
@@ -157,9 +220,9 @@ class BergsonCovarianceCollector:
             target_info=self.target_info, lambda_damp_factor=1e-5
         )
 
-        # Create collector
-        self.collector = CovarianceCollector(
-            model.base_model,
+        # Create collector (using SlicedCovarianceCollector to match original's [:, :-1] slicing)
+        self.collector = SlicedCovarianceCollector(
+            model=model.base_model,
             target_modules=self.target_modules,
             dtype=dtype,
             shard_computer=self.shard_computer,
