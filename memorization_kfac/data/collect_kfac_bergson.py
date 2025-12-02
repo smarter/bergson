@@ -353,7 +353,9 @@ def main():
             if len(batch) == batch_size:
                 yield torch.stack(batch)
                 batch = []
-        # Don't yield incomplete final batch to match original behavior
+        # Yield incomplete final batch (DataLoader default is drop_last=False)
+        if batch:
+            yield torch.stack(batch)
 
     # Create collector
     collector = BergsonCovarianceCollector(
