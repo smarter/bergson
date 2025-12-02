@@ -233,15 +233,22 @@ class BergsonCovarianceCollector:
         self.total_tokens = 0
 
     def collect(self, data_loader, sample_labels: bool = False):
-        """Collect covariances from data."""
+        """Collect covariances from data.
+
+        Args:
+            data_loader: DataLoader yielding batches of input_ids [B, S]
+            sample_labels: If True, use multinomial sampling for labels
+        """
         ce_loss = torch.nn.CrossEntropyLoss(ignore_index=-100)
 
         with self.collector:
-            for batch_idx, input_ids in enumerate(
-                tqdm(data_loader, desc=f"Collecting covariances")
-            ):
-                # Prepare batch
-                x = torch.tensor(input_ids, device=self.model.device).unsqueeze(0)
+            for batch in tqdm(data_loader, desc=f"Collecting covariances"):
+                # Handle both dict batches and tensor batches
+                if isinstance(batch, dict):
+                    x = batch["input_ids"].to(self.model.device)
+                else:
+                    x = batch.to(self.model.device)
+
                 mask = x != self.tokenizer.pad_token_id
 
                 # Prepare labels (shift by 1)
@@ -335,8 +342,18 @@ def main():
     print(f"Processing blocks: {args.target_blocks}")
     print(f"Streaming ~{args.nbytes / 1e6:.0f}MB from {args.corpus}")
 
-    # Create streaming dataset
+    # Create streaming dataset with batching iterator
     streaming_ds = StreamingDataset(args.corpus, tokenizer, args.seq_len, args.nbytes)
+
+    def batched_iter(dataset, batch_size):
+        """Yield batches from an iterable dataset."""
+        batch = []
+        for item in dataset:
+            batch.append(torch.tensor(item))
+            if len(batch) == batch_size:
+                yield torch.stack(batch)
+                batch = []
+        # Don't yield incomplete final batch to match original behavior
 
     # Create collector
     collector = BergsonCovarianceCollector(
@@ -348,8 +365,8 @@ def main():
         kfac_only=args.kfac_only,
     )
 
-    # Collect covariances
-    collector.collect(streaming_ds, sample_labels=args.sample_labels)
+    # Collect covariances with batched data
+    collector.collect(batched_iter(streaming_ds, args.batch_size), sample_labels=args.sample_labels)
 
     # Save factors
     collector.save_factors()
