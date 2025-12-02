@@ -31,42 +31,57 @@ class SlicedCovarianceCollector(CovarianceCollector):
     the original collect_kfac_multilayer.py implementation.
 
     Original uses: x = inp[0][:, :-1] and g = go[0][:, :-1]
+
+    IMPORTANT: To avoid double-counting with gradient checkpointing, we store
+    activations in forward_hook and compute both covariances in backward_hook
+    (matching the original implementation's approach).
     """
 
+    def setup(self) -> None:
+        """Initialize covariance storage and activation buffer."""
+        super().setup()
+        # Buffer to store activations from forward pass (keyed by layer name)
+        self._activation_buf: dict[str, Tensor] = {}
+
     def forward_hook(self, name: str, a: Tensor) -> None:
-        """Compute activation covariance: A^T @ A, dropping last position."""
-        A_cov_ki = self.A_cov_dict[name]
-
-        # Drop last position to match original implementation
-        a = a[:, :-1, :]
-
-        # Reshape to [N*(S-1), I]
-        a_bi = a.reshape(-1, a.shape[-1])
-
-        # Compute local covariance
-        local_update_ii = a_bi.mT @ a_bi
-
-        # All-reduce across ranks
-        if dist.is_initialized():
-            dist.all_reduce(local_update_ii, op=dist.ReduceOp.SUM)
-
-        # Extract our shard
-        start_row = self.rank * A_cov_ki.shape[0]
-        end_row = (self.rank + 1) * A_cov_ki.shape[0]
-        update_slice_ki = local_update_ii[start_row:end_row, :]
-
-        # Accumulate
-        A_cov_ki.add_(update_slice_ki)
+        """Store activations for later covariance computation in backward."""
+        # Only store if gradients are enabled (skip recompute during checkpointing)
+        if torch.is_grad_enabled():
+            # Drop last position to match original implementation
+            a = a[:, :-1, :]
+            # Store for use in backward hook
+            self._activation_buf[name] = a.reshape(-1, a.shape[-1]).detach()
 
     def backward_hook(self, name: str, g: Tensor) -> None:
-        """Compute gradient covariance: G^T @ G, dropping last position."""
+        """Compute both activation and gradient covariances."""
+        # Compute activation covariance from stored buffer
+        if name in self._activation_buf:
+            A_cov_ki = self.A_cov_dict[name]
+            a_bi = self._activation_buf.pop(name).float()
+
+            # Compute local covariance
+            local_update_ii = a_bi.mT @ a_bi
+
+            # All-reduce across ranks
+            if dist.is_initialized():
+                dist.all_reduce(local_update_ii, op=dist.ReduceOp.SUM)
+
+            # Extract our shard
+            start_row = self.rank * A_cov_ki.shape[0]
+            end_row = (self.rank + 1) * A_cov_ki.shape[0]
+            update_slice_ki = local_update_ii[start_row:end_row, :]
+
+            # Accumulate
+            A_cov_ki.add_(update_slice_ki)
+
+        # Compute gradient covariance
         S_cov_po = self.S_cov_dict[name]
 
         # Drop last position to match original implementation
         g = g[:, :-1, :]
 
         # Reshape to [N*(S-1), O]
-        g_bo = g.reshape(-1, g.shape[-1])
+        g_bo = g.reshape(-1, g.shape[-1]).float()
 
         # Compute local covariance
         local_update_oo = g_bo.mT @ g_bo
