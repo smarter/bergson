@@ -13,7 +13,7 @@ stages:
     outs:
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: d0d28b14ed7ec5d06670b23f42b52182.dir
+      md5: 89f56b116dcd14594110b2e9301b5adc.dir
       size: 855641173
       nfiles: 2
   collect_kfac_bergson:
@@ -32,8 +32,8 @@ stages:
       size: 10093
     - path: memorization_kfac/data/collect_kfac_bergson.py
       hash: md5
-      md5: 30876b7d7d104f8b14d29e2248926858
-      size: 12513
+      md5: 69a1bc10e4024c4feaa16e130edc7d4c
+      size: 12800
     params:
       params.yaml:
         collect_kfac:
@@ -50,7 +50,7 @@ stages:
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: ce1e4e8047a6c4b787fb42f852224ee8.dir
+      md5: eb39e347a8385bc138187ed430164412.dir
       size: 427819720
       nfiles: 3
   convert_bergson_to_original:
@@ -64,13 +64,13 @@ stages:
       size: 4382
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: ce1e4e8047a6c4b787fb42f852224ee8.dir
+      md5: eb39e347a8385bc138187ed430164412.dir
       size: 427819720
       nfiles: 3
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: b81ff0fea9f01708644f1583ddcbb072.dir
+      md5: 243128bfe87397f5547e48582402b9ae.dir
       size: 855641125
       nfiles: 1
   compare_kfac_implementations:
@@ -86,12 +86,12 @@ stages:
       size: 6833
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: d0d28b14ed7ec5d06670b23f42b52182.dir
+      md5: 89f56b116dcd14594110b2e9301b5adc.dir
       size: 855641173
       nfiles: 2
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: b81ff0fea9f01708644f1583ddcbb072.dir
+      md5: 243128bfe87397f5547e48582402b9ae.dir
       size: 855641125
       nfiles: 1
     params:
@@ -100,5 +100,5 @@ stages:
     outs:
     - path: memorization_kfac/metrics/kfac_comparison_results.json
       hash: md5
-      md5: fd0f0b205158d003084d594c3d951d87
-      size: 2434
+      md5: b431fb11a91a39283077c7954d00a1bf
+      size: 2466
