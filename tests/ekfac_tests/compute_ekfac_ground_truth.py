@@ -435,13 +435,14 @@ def compute_covariance(
 
     for sl in tqdm(batches, desc=f"Rank {rank} covariances"):
         batch = data[sl]
-        x, y = pad_and_tensor(
+        x, y, valid_masks = pad_and_tensor(
             batch["input_ids"],
             labels=batch.get("labels"),
             device=device,
         )
 
-        total_processed += x.numel()
+        total_processed += valid_masks.sum()
+        collector.set_valid_masks(valid_masks)
 
         with collector:
             logits = model(x).logits
@@ -679,13 +680,14 @@ def compute_eigenvalue_correction_amortized(
 
     for sl in tqdm(batches, desc=f"Rank {rank} eigenvalue corrections"):
         batch = data[sl]
-        x, y = pad_and_tensor(
+        x, y, valid_masks = pad_and_tensor(
             batch["input_ids"],
             labels=batch.get("labels"),
             device=device,
         )
 
-        total_processed += x.numel()
+        total_processed += valid_masks.sum()
+        collector.set_valid_masks(valid_masks)
 
         with collector:
             logits = model(x).logits
