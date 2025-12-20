@@ -135,7 +135,7 @@ def compare_factors(
         print(f"  Bergson shape:  {berg['A'].shape}")
         A_metrics = compute_similarity_metrics(orig["A"], berg["A"])
         for metric, value in A_metrics.items():
-            print(f"  {metric}: {value:.6f}")
+            print(f"  {metric}: {value:.12f}")
 
         # Compare G matrices
         print("\nGradient Covariance (G):")
@@ -143,7 +143,7 @@ def compare_factors(
         print(f"  Bergson shape:  {berg['G'].shape}")
         G_metrics = compute_similarity_metrics(orig["G"], berg["G"])
         for metric, value in G_metrics.items():
-            print(f"  {metric}: {value:.6f}")
+            print(f"  {metric}: {value:.12f}")
 
         # Token counts
         print(f"\nToken counts:")
@@ -191,10 +191,10 @@ def compare_factors(
     print(f"{'='*60}")
     print("\nActivation Covariance (A):")
     for metric, value in results["summary"]["aggregate"]["A"].items():
-        print(f"  {metric}: {value:.6f}")
+        print(f"  {metric}: {value:.12f}")
     print("\nGradient Covariance (G):")
     for metric, value in results["summary"]["aggregate"]["G"].items():
-        print(f"  {metric}: {value:.6f}")
+        print(f"  {metric}: {value:.12f}")
 
     return results
 
