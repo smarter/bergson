@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import pathlib
+import random
 from typing import Optional
 
 import torch
@@ -64,6 +65,7 @@ def parse():
         help="Use KFAC (covariances only) instead of EKFAC (with eigenvalue correction). "
         "When enabled, only CovarianceCollector is used without LambdaCollector.",
     )
+    p.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     return p.parse_args()
 
 
@@ -146,6 +148,12 @@ class SimpleDataset:
 
 def main():
     args = parse()
+
+    # Set random seed for reproducibility
+    torch.manual_seed(args.seed)
+    random.seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
     # Fix device string
     if args.device.startswith("cuda") and ":" not in args.device:
