@@ -21,7 +21,7 @@ collect_kfac:
   target_blocks: "13" # 14 15"  # Multiple layers for better comparison coverage
 
   # Optional: use multinomial-sampled labels instead of gold labels
-  sample_labels: "--sample_labels"  # Set to "" to disable
+  sample_labels: "" # "--sample_labels"  # Set to "" to disable
 
 # K-FAC Edit Parameters
 kfac_edit:
