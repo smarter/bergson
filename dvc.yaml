@@ -302,6 +302,7 @@ stages:
     cmd: >-
       MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper
       MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_7b
+      CUDA_VISIBLE_DEVICES=0
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 7b
       --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
@@ -340,6 +341,7 @@ stages:
     cmd: >-
       MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper
       MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_1b
+      CUDA_VISIBLE_DEVICES=0
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 1b
       --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
