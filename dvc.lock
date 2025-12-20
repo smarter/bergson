@@ -2,11 +2,9 @@ schema: '2.0'
 stages:
   collect_kfac_factors:
     cmd:
-    - python memorization_kfac/data/collect_kfac_multilayer.py --model 
-      allenai/OLMo-2-0425-1B --device cuda --dtype bfloat16 --corpus dolmo 
-      --nbytes 10000 --seq_len 512 --batch_size 1 --layers_per_pass 1 
-      --target_blocks 13 --save_dir 
-      "memorization_kfac/data/kfac_factors/olmo2_1b" --sample_labels
+    - 'python memorization_kfac/data/collect_kfac_multilayer.py --model allenai/OLMo-2-0425-1B
+      --device cuda --dtype bfloat16 --corpus dolmo --nbytes 100000 --seq_len 512
+      --batch_size 1 --layers_per_pass 1 --target_blocks 13 --save_dir "memorization_kfac/data/kfac_factors/olmo2_1b" '
     deps:
     - path: memorization_kfac/data/collect_kfac_multilayer.py
       hash: md5
@@ -15,15 +13,14 @@ stages:
     outs:
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: 84a978ad457939f1e7c9e44324a4eb33.dir
-      size: 855641173
+      md5: c26204575315252c6dafaa4a510f9dd3.dir
+      size: 855641174
       nfiles: 2
   collect_kfac_bergson:
-    cmd: python memorization_kfac/data/collect_kfac_bergson.py --model 
-      allenai/OLMo-2-0425-1B --device cuda --dtype bfloat16 --corpus dolmo 
-      --nbytes 10000 --seq_len 512 --batch_size 1 --layers_per_pass 1 
-      --target_blocks 13 --save_dir memorization_kfac/data/kfac_factors_bergson 
-      --kfac-only --sample_labels
+    cmd: 'python memorization_kfac/data/collect_kfac_bergson.py --model allenai/OLMo-2-0425-1B
+      --device cuda --dtype bfloat16 --corpus dolmo --nbytes 100000 --seq_len 512
+      --batch_size 1 --layers_per_pass 1 --target_blocks 13 --save_dir memorization_kfac/data/kfac_factors_bergson
+      --kfac-only '
     deps:
     - path: bergson/hessians/collector.py
       hash: md5
@@ -43,18 +40,18 @@ stages:
           device: cuda
           dtype: bfloat16
           corpus: dolmo
-          nbytes: 10000
+          nbytes: 100000
           seq_len: 512
           batch_size: 1
           layers_per_pass: 1
           target_blocks: '13'
-          sample_labels: --sample_labels
+          sample_labels: ''
         model.name: allenai/OLMo-2-0425-1B
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: dc1ae8c19390d6d9f1d0af7ba6fe648b.dir
-      size: 427821538
+      md5: 033bee572c6296ef4653187a61f87550.dir
+      size: 427821539
       nfiles: 4
   convert_bergson_to_original:
     cmd: python memorization_kfac/data/convert_bergson_to_original.py 
@@ -67,13 +64,13 @@ stages:
       size: 4781
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: dc1ae8c19390d6d9f1d0af7ba6fe648b.dir
-      size: 427821538
+      md5: 033bee572c6296ef4653187a61f87550.dir
+      size: 427821539
       nfiles: 4
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: b5c2d34d3807637582919fc0f5650244.dir
+      md5: 6f42870f62e2a42df5be772b319b7cc8.dir
       size: 855641125
       nfiles: 1
   compare_kfac_implementations:
@@ -89,12 +86,12 @@ stages:
       size: 6837
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: 84a978ad457939f1e7c9e44324a4eb33.dir
-      size: 855641173
+      md5: c26204575315252c6dafaa4a510f9dd3.dir
+      size: 855641174
       nfiles: 2
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: b5c2d34d3807637582919fc0f5650244.dir
+      md5: 6f42870f62e2a42df5be772b319b7cc8.dir
       size: 855641125
       nfiles: 1
     params:
@@ -103,5 +100,5 @@ stages:
     outs:
     - path: memorization_kfac/metrics/kfac_comparison_results.json
       hash: md5
-      md5: 2bff3f19871bd1729a94fa300aab8c7b
-      size: 2441
+      md5: 3521385f4fdfec293f3ead05e86d0228
+      size: 2454
