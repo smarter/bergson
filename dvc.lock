@@ -63,17 +63,17 @@ stages:
     deps:
     - path: memorization_kfac/data/convert_bergson_to_original.py
       hash: md5
-      md5: c2bffaf209058f30d23e6758bac90b1f
-      size: 4382
+      md5: eb48766592456966a2267bdcf21f2d4a
+      size: 4756
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: ce1e4e8047a6c4b787fb42f852224ee8.dir
-      size: 427819720
-      nfiles: 3
+      md5: d574eb26ff22abbb4cef4792e9be5e32.dir
+      size: 427821481
+      nfiles: 4
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: b81ff0fea9f01708644f1583ddcbb072.dir
+      md5: d314228f92325adf43b3a1df6ce1ba82.dir
       size: 855641125
       nfiles: 1
   compare_kfac_implementations:
@@ -89,12 +89,12 @@ stages:
       size: 6833
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: d0d28b14ed7ec5d06670b23f42b52182.dir
+      md5: a7555c46b14567ad097449206c1c48b2.dir
       size: 855641173
       nfiles: 2
     - path: memorization_kfac/data/kfac_factors_bergson_converted
       hash: md5
-      md5: b81ff0fea9f01708644f1583ddcbb072.dir
+      md5: d314228f92325adf43b3a1df6ce1ba82.dir
       size: 855641125
       nfiles: 1
     params:
@@ -103,5 +103,5 @@ stages:
     outs:
     - path: memorization_kfac/metrics/kfac_comparison_results.json
       hash: md5
-      md5: fd0f0b205158d003084d594c3d951d87
-      size: 2434
+      md5: 19367e980697fe66192322cd4555750c
+      size: 2439
