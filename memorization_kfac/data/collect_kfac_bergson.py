@@ -220,12 +220,12 @@ def main():
     )
 
     # Compute covariances (handles valid_mask, total_processed, etc.)
-    total_processed = ekfac.compute_covariance()
+    # total_processed is saved to disk at influence_results/total_processed_covariances.pt
+    ekfac.compute_covariance()
 
-    # Save metadata
+    # Save metadata (total_processed is in the .pt file, no need to duplicate)
     metadata = {
         "blocks": args.target_blocks,
-        "total_processed": int(total_processed),
         "format": "bergson",
         "kfac_only": args.kfac_only,
         "method": method,
@@ -234,7 +234,7 @@ def main():
     with open(args.save_dir / "metadata.json", "w") as f:
         json.dump(metadata, indent=2, fp=f)
 
-    print(f"✓ Saved {method} factors for blocks {args.target_blocks} ({total_processed:,} valid positions)")
+    print(f"✓ Saved {method} factors for blocks {args.target_blocks}")
     print("✓ Collection complete using bergson")
 
 
