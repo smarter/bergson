@@ -154,7 +154,7 @@ def main():
         collate_fn=lambda b: {"input_ids": torch.stack(
             [torch.tensor(x["input_ids"]) for x in b])})
 
-    ce = torch.nn.CrossEntropyLoss(ignore_index=-100)
+    ce = torch.nn.CrossEntropyLoss(ignore_index=-100, reduction="sum")
     a.save_dir.mkdir(parents=True, exist_ok=True)
 
     # --- progressively collect layers in small groups ----------
@@ -196,7 +196,7 @@ def main():
                                 .reshape(-1, logits.size(-1)),
                             1).squeeze(1)
                     loss = torch.nn.functional.cross_entropy(
-                            logits.reshape(-1, logits.size(-1)), y)
+                            logits.reshape(-1, logits.size(-1)), y, reduction="sum")
                 else:
                     # --- gold labels ------------------------------------------------
                     loss = ce(logits.reshape(-1, logits.size(-1)),
