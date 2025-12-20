@@ -4,18 +4,18 @@ stages:
     cmd:
     - python memorization_kfac/data/collect_kfac_multilayer.py --model 
       allenai/OLMo-2-0425-1B --device cuda --dtype bfloat16 --corpus dolmo 
-      --nbytes 10000 --seq_len 512 --batch_size 2 --layers_per_pass 1 
+      --nbytes 10000 --seq_len 512 --batch_size 1 --layers_per_pass 1 
       --target_blocks 13 --save_dir 
       "memorization_kfac/data/kfac_factors/olmo2_1b" --sample_labels
     deps:
     - path: memorization_kfac/data/collect_kfac_multilayer.py
       hash: md5
-      md5: eadc1c09b1c298ffbeb06301e795499b
-      size: 9980
+      md5: a12eedc59a331385f1133a0aa61d4425
+      size: 10243
     outs:
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: a7555c46b14567ad097449206c1c48b2.dir
+      md5: 2f8e4b9f9b87bdedd439dabfbc126630.dir
       size: 855641173
       nfiles: 2
   collect_kfac_bergson:
