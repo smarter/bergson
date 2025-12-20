@@ -43,7 +43,7 @@ stages:
         --corpus dolmo
         --nbytes 100000000
         --seq_len 512
-        --batch_size 32
+        --batch_size 24
         --layers_per_pass 3
         --target_blocks 23 24 25
         --save_dir memorization_kfac/data/kfac_factors_paper/olmo2_7b
@@ -102,7 +102,7 @@ stages:
         --corpus dolmo
         --nbytes 100000000
         --seq_len 512
-        --batch_size 32
+        --batch_size 24
         --layers_per_pass 1
         --target_blocks 23 24 25
         --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
