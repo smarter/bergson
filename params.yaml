@@ -12,7 +12,7 @@ collect_kfac:
   # Data settings
   corpus: "dolmo"  # choices: olmo, dolmo
   # nbytes: 10000000  # ~10MB of text data (~2M tokens) for comparison
-  nbytes: 10000
+  nbytes: 100000
   seq_len: 512
   batch_size: 1 #2 #4 #16  # Increased for more efficient processing
 
@@ -21,7 +21,7 @@ collect_kfac:
   target_blocks: "13" # 14 15"  # Multiple layers for better comparison coverage
 
   # Optional: use multinomial-sampled labels instead of gold labels
-  sample_labels: "--sample_labels"  # Set to "" to disable
+  sample_labels: "" # "--sample_labels"  # Set to "" to disable
 
 # K-FAC Edit Parameters
 kfac_edit:
