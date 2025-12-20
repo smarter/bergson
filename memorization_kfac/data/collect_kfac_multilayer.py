@@ -101,13 +101,9 @@ class KFAC:
     def _bwd(self, _, __, go):
         if go[0] is None or self._buf is None: return
         g = go[0][:, :-1].detach().reshape(-1, go[0].size(-1)).float()
-        # Filter out positions with zero gradients (padding positions with ignore_index)
-        valid_mask = (g.abs().sum(dim=1) > 0)
-        g_valid = g[valid_mask]
-        x_valid = self._buf[valid_mask]
-        self.A.add_(x_valid.T @ x_valid)
-        self.G.add_(g_valid.T @ g_valid)
-        self.n += valid_mask.sum().item()
+        self.A.add_(self._buf.T @ self._buf)
+        self.G.add_(g.T @ g)
+        self.n += g.size(0)
         self._buf = None
     def factors(self): return self.A / self.n, self.G / self.n
 
