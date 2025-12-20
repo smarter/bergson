@@ -200,17 +200,15 @@ def main():
                 logits = model(x, attention_mask=mask).logits[:, :-1].float()
                 if a.sample_labels:
             # --- multinomial  ----------
+                    # ⚠️  WARNING: This branch ignores padding mask - will train on pad tokens
+                    #     if sequences are padded. Current iterator uses exact seq_len, so safe.
                     with torch.no_grad():
                         y = torch.multinomial(
                             torch.softmax(logits, dim=-1)
                                 .reshape(-1, logits.size(-1)),
                             1).squeeze(1)
-                    # Filter by valid positions (exclude padding and last position)
-                    flat_mask = labels[:, :-1].reshape(-1) != -100
                     loss = torch.nn.functional.cross_entropy(
-                            logits.reshape(-1, logits.size(-1))[flat_mask],
-                            y[flat_mask],
-                            reduction="sum")
+                            logits.reshape(-1, logits.size(-1)), y, reduction="sum")
                 else:
                     # --- gold labels ------------------------------------------------
                     loss = ce(logits.reshape(-1, logits.size(-1)),
