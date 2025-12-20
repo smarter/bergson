@@ -223,12 +223,15 @@ def main():
     # total_processed is saved to disk at influence_results/total_processed_covariances.pt
     ekfac.compute_covariance()
 
-    # Save metadata (total_processed is in the .pt file, no need to duplicate)
+    # Save metadata with batch information for conversion to original format
     metadata = {
         "blocks": args.target_blocks,
         "format": "bergson",
         "kfac_only": args.kfac_only,
         "method": method,
+        "num_batches": len(batches),
+        "batch_size": args.batch_size,
+        "seq_len": args.seq_len,
     }
 
     with open(args.save_dir / "metadata.json", "w") as f:

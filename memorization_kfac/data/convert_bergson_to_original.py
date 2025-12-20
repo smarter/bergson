@@ -4,7 +4,8 @@ Convert bergson KFAC format to original memorization_kfac format.
 
 Handles:
 - Key name mapping: layers.N.mlp.gate_proj → blkN.gate
-- Normalization: raw sums → normalized by n_tokens
+- Normalization: raw sums → normalized by total_processed (valid positions)
+- Gradient scaling: G scaled by 1/batch_positions² to match original's mean-reduction convention
 - Format conversion: safetensors → .pt
 """
 import argparse
@@ -93,6 +94,13 @@ def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.P
 
     blocks = metadata["blocks"]
 
+    # Scale G by 1/batch_positions² to match original's mean-reduction convention
+    batch_size = metadata["batch_size"]
+    seq_len = metadata["seq_len"]
+    batch_positions = batch_size * (seq_len - 1)  # Approximate valid positions per batch
+    batch_scale = 1.0 / (batch_positions ** 2)
+    print(f"Scaling G by 1/{batch_positions}² = {batch_scale:.2e} to match original's mean-reduction convention")
+
     print(f"Found {len(A_dict)} activation covariances")
     print(f"Found {len(G_dict)} gradient covariances")
     print(f"Total valid positions: {total_processed:,}")
@@ -111,7 +119,7 @@ def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.P
 
         # Normalize matrices by total_processed (valid positions only)
         A_normalized = A_dict[bergson_key].float() / total_processed
-        G_normalized = G_dict[bergson_key].float() / total_processed
+        G_normalized = G_dict[bergson_key].float() / total_processed * batch_scale
 
         block_data[block_num][original_key] = {
             "A": A_normalized,
