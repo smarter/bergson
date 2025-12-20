@@ -87,13 +87,9 @@ def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.P
     print(f"Loading bergson output from {bergson_dir}")
     A_dict, G_dict, metadata = load_bergson_covariances(bergson_dir)
 
-    # Use total_processed (valid positions) for normalization, not n_tokens (all tokens)
-    total_processed = metadata.get("total_processed")
-    if total_processed is None:
-        # Fallback for old format (before valid_mask fix)
-        print("WARNING: metadata missing 'total_processed', falling back to 'n_tokens'")
-        print("This will produce incorrect normalization if valid_mask was used!")
-        total_processed = metadata["n_tokens"]
+    # Read total_processed from the .pt file (saved by EkfacComputer._collector)
+    total_processed_path = bergson_dir / "total_processed_covariances.pt"
+    total_processed = torch.load(total_processed_path, map_location="cpu").item()
 
     blocks = metadata["blocks"]
 
