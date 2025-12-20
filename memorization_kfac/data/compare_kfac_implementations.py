@@ -191,10 +191,10 @@ def compare_factors(
     print(f"{'='*60}")
     print("\nActivation Covariance (A):")
     for metric, value in results["summary"]["aggregate"]["A"].items():
-        print(f"  {metric}: {value:.6f}")
+        print(f"  {metric}: {value:.12f}")
     print("\nGradient Covariance (G):")
     for metric, value in results["summary"]["aggregate"]["G"].items():
-        print(f"  {metric}: {value:.6f}")
+        print(f"  {metric}: {value:.12f}")
 
     return results
 
