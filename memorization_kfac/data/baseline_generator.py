@@ -103,10 +103,11 @@ def generate_baseline_topk(model,
         device: Device to use (auto-detect if None)
     """
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Ensure model is on correct device and in eval mode
-    model = model.to(device).eval()
+        device = next(model.parameters()).device
+
+    # Ensure model is in eval mode
+    # NOTE: Don't call .to(device) on accelerate-dispatched models!
+    model.eval()
     
     # Create dataset
     ds = TextChunkDataset(data_path, tokenizer, seq_len, max_tokens=max_tokens)
