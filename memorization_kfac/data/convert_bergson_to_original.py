@@ -35,7 +35,7 @@ def load_bergson_covariances(bergson_dir: pathlib.Path):
     """Load covariances from bergson safetensors format."""
     # Load activation covariances (A matrices)
     A_dict = {}
-    act_cov_dir = bergson_dir / "activation_covariance_sharded"
+    act_cov_dir = bergson_dir / "influence_results" / "activation_covariance_sharded"
     if act_cov_dir.exists():
         for shard_file in sorted(act_cov_dir.glob("shard_*.safetensors")):
             with safe_open(shard_file, framework="pt", device="cpu") as f:
@@ -44,7 +44,7 @@ def load_bergson_covariances(bergson_dir: pathlib.Path):
 
     # Load gradient covariances (G matrices)
     G_dict = {}
-    grad_cov_dir = bergson_dir / "gradient_covariance_sharded"
+    grad_cov_dir = bergson_dir / "influence_results" / "gradient_covariance_sharded"
     if grad_cov_dir.exists():
         for shard_file in sorted(grad_cov_dir.glob("shard_*.safetensors")):
             with safe_open(shard_file, framework="pt", device="cpu") as f:
@@ -88,7 +88,7 @@ def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.P
     A_dict, G_dict, metadata = load_bergson_covariances(bergson_dir)
 
     # Read total_processed from the .pt file (saved by EkfacComputer._collector)
-    total_processed_path = bergson_dir / "total_processed_covariances.pt"
+    total_processed_path = bergson_dir / "influence_results" / "total_processed_covariances.pt"
     total_processed = torch.load(total_processed_path, map_location="cpu").item()
 
     blocks = metadata["blocks"]
