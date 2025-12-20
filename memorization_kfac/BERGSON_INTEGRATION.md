@@ -2,20 +2,41 @@
 
 ## Overview
 
-Successfully integrated bergson's EKFAC implementation into the memorization_kfac project as an alternative K-FAC collector.
+Successfully integrated bergson's EKFAC implementation into the memorization_kfac project using the proper `valid_mask` logic to exclude positions without valid gradients (padding, last position).
 
 ## Implementation
 
-### New Files
+### Files
 
 - **`memorization_kfac/data/collect_kfac_bergson.py`**: K-FAC collector using bergson's `CovarianceCollector`
   - Same CLI interface as `collect_kfac_multilayer.py`
-  - Uses bergson's hook-based covariance collection
+  - Uses bergson's hook-based covariance collection with `valid_mask`
+  - Properly excludes padding and last position from covariances
+  - Tracks `total_processed` (valid positions) not `n_tokens` (all tokens)
   - Outputs in bergson's native safetensors format
 
-### DVC Pipeline
+- **`memorization_kfac/data/convert_bergson_to_original.py`**: Convert bergson format to original
+  - Normalizes by `total_processed` (valid positions) for correct covariance computation
+  - Converts key names from bergson format to original format
+  - Converts safetensors to .pt files
 
-Added `collect_kfac_bergson` stage to `dvc.yaml` that runs the bergson-based collector alongside the original.
+### Key Improvements (After valid_mask Fix)
+
+**Before (old SlicedCovarianceCollector):**
+- Custom `SlicedCovarianceCollector` class duplicating logic
+- Manually sliced `[:, :-1]` to drop last position
+- Still included padding positions → diluted covariances
+- Counted all tokens for normalization → incorrect scaling
+- Manual label preparation and loss computation
+- Required gradient checkpointing to be disabled
+
+**After (using EkfacComputer directly):**
+- Uses `EkfacComputer` from bergson - no code duplication!
+- All logic (valid_mask, label prep, loss, total_processed) handled by bergson
+- Properly excludes both padding AND last position
+- Counts only valid positions for normalization → correct scaling
+- Works with or without gradient checkpointing
+- Much simpler: ~60 lines of actual logic vs ~130 before
 
 ## Format Differences
 

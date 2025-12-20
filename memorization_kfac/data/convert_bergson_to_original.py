@@ -87,12 +87,19 @@ def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.P
     print(f"Loading bergson output from {bergson_dir}")
     A_dict, G_dict, metadata = load_bergson_covariances(bergson_dir)
 
-    n_tokens = metadata["n_tokens"]
+    # Use total_processed (valid positions) for normalization, not n_tokens (all tokens)
+    total_processed = metadata.get("total_processed")
+    if total_processed is None:
+        # Fallback for old format (before valid_mask fix)
+        print("WARNING: metadata missing 'total_processed', falling back to 'n_tokens'")
+        print("This will produce incorrect normalization if valid_mask was used!")
+        total_processed = metadata["n_tokens"]
+
     blocks = metadata["blocks"]
 
     print(f"Found {len(A_dict)} activation covariances")
     print(f"Found {len(G_dict)} gradient covariances")
-    print(f"Total tokens: {n_tokens:,}")
+    print(f"Total valid positions: {total_processed:,}")
     print(f"Blocks: {blocks}")
 
     # Group by block
@@ -106,14 +113,14 @@ def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.P
         if block_num not in block_data:
             block_data[block_num] = {}
 
-        # Normalize matrices by n_tokens
-        A_normalized = A_dict[bergson_key].float() / n_tokens
-        G_normalized = G_dict[bergson_key].float() / n_tokens
+        # Normalize matrices by total_processed (valid positions only)
+        A_normalized = A_dict[bergson_key].float() / total_processed
+        G_normalized = G_dict[bergson_key].float() / total_processed
 
         block_data[block_num][original_key] = {
             "A": A_normalized,
             "G": G_normalized,
-            "n_tokens": n_tokens,
+            "n_tokens": total_processed,  # Store as n_tokens for compatibility
         }
 
     # Save one file per block (matching original format)
