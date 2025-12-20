@@ -47,6 +47,7 @@ stages:
         --layers_per_pass 3
         --target_blocks 23 24 25
         --save_dir memorization_kfac/data/kfac_factors_paper/olmo2_7b
+        --sample_labels
     deps:
       - memorization_kfac/data/collect_kfac_multilayer.py
     outs:
@@ -63,6 +64,25 @@ stages:
 
       Computes A = E[aa^T] and G = E[gg^T] for gate_proj, up_proj, down_proj
       in each target layer.
+
+  collect_kfac_paper_7b_sample:
+    cmd:
+      - python memorization_kfac/data/collect_kfac_multilayer.py
+        --model allenai/OLMo-2-1124-7B
+        --device cuda
+        --dtype bfloat16
+        --corpus dolmo
+        --nbytes 100000000
+        --seq_len 512
+        --batch_size 24
+        --layers_per_pass 3
+        --target_blocks 23 24 25
+        --save_dir memorization_kfac/data/kfac_factors_paper_sample/olmo2_7b
+    deps:
+      - memorization_kfac/data/collect_kfac_multilayer.py
+    outs:
+      - memorization_kfac/data/kfac_factors_paper_sample/olmo2_7b
+
 
   collect_kfac_paper_1b:
     cmd:
@@ -90,6 +110,26 @@ stages:
       - Data: ~100MB (~20M tokens) from Dolmino/OLMo mixtures
       - Sequence length: 512
       - Corpus: dolmo
+
+  collect_kfac_paper_1b_sample:
+    cmd:
+      - python memorization_kfac/data/collect_kfac_multilayer.py
+        --model allenai/OLMo-2-0425-1B
+        --device cuda
+        --dtype bfloat16
+        --corpus dolmo
+        --nbytes 100000000
+        --seq_len 512
+        --batch_size 32
+        --layers_per_pass 3
+        --target_blocks 13 14 15
+        --save_dir memorization_kfac/data/kfac_factors_paper_sample/olmo2_1b
+        --sample_labels
+    deps:
+      - memorization_kfac/data/collect_kfac_multilayer.py
+    outs:
+      - memorization_kfac/data/kfac_factors_paper_sample/olmo2_1b
+
 
   # --- Bergson implementation of paper collection (for comparison) ---
 
@@ -337,6 +377,31 @@ stages:
 
       Also computes: nDCG@10 (expected: 0.91)
 
+  paper_table1_7b_sample:
+    cmd: >-
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_sample
+      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_7b_sample
+      CUDA_VISIBLE_DEVICES=0
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size 7b
+      --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      --use-cache
+      --perplexity
+      --results-dir memorization_kfac/metrics_sample
+      --results-tag table1_7b
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/data/kfac_factors_paper_sample/olmo2_7b
+      - memorization_kfac/data/pile10k_None.txt
+      - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+    outs:
+      - memorization_kfac/cache/kfac_weights_paper_7b_sample:
+          cache: true
+    metrics:
+      - memorization_kfac/metrics_sample/kfac_eval_log_7b_table1_7b.jsonl:
+          cache: false
+
+
   paper_table1_1b:
     cmd: >-
       MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper
@@ -375,6 +440,31 @@ stages:
       - Historical Quotes Loose: 39.9%
       - Historical Quotes Avg Lev: 0.470
       - Pile 10k Perplexity: 26.53 (up from 23.19 baseline)
+
+  paper_table1_1b_sample:
+    cmd: >-
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_sample
+      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_1b_sample
+      CUDA_VISIBLE_DEVICES=0
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size 1b
+      --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      --use-cache
+      --perplexity
+      --results-dir memorization_kfac/metrics_sample
+      --results-tag table1_1b
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/data/kfac_factors_paper_sample/olmo2_1b
+      - memorization_kfac/data/pile10k_None.txt
+      - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+    outs:
+      - memorization_kfac/cache/kfac_weights_paper_1b_sample:
+          cache: true
+    metrics:
+      - memorization_kfac/metrics_sample/kfac_eval_log_1b_table1_1b.jsonl:
+          cache: false
+
 
   # =============================================================================
   # Result Validation (Compare against Paper Values)
