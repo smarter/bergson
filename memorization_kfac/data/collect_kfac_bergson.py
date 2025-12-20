@@ -195,11 +195,12 @@ def main():
         batches.append(list(range(i, min(i + args.batch_size, len(sequences)))))
 
     # Prepare target modules (gate, up, down projections for specified blocks)
+    # Note: EkfacComputer uses model.base_model internally, so names should not include "model." prefix
     target_modules = set()
     for blk in args.target_blocks:
-        target_modules.add(f"model.layers.{blk}.mlp.gate_proj")
-        target_modules.add(f"model.layers.{blk}.mlp.up_proj")
-        target_modules.add(f"model.layers.{blk}.mlp.down_proj")
+        target_modules.add(f"layers.{blk}.mlp.gate_proj")
+        target_modules.add(f"layers.{blk}.mlp.up_proj")
+        target_modules.add(f"layers.{blk}.mlp.down_proj")
 
     # Create IndexConfig
     idx_config = IndexConfig(
