@@ -2,9 +2,11 @@ schema: '2.0'
 stages:
   collect_kfac_factors:
     cmd:
-    - 'python memorization_kfac/data/collect_kfac_multilayer.py --model allenai/OLMo-2-0425-1B
-      --device cuda --dtype bfloat16 --corpus dolmo --nbytes 10000 --seq_len 512 --batch_size
-      4 --layers_per_pass 1 --target_blocks 13 --save_dir "memorization_kfac/data/kfac_factors/olmo2_1b" '
+    - python memorization_kfac/data/collect_kfac_multilayer.py --model 
+      allenai/OLMo-2-0425-1B --device cuda --dtype bfloat16 --corpus dolmo 
+      --nbytes 10000 --seq_len 512 --batch_size 2 --layers_per_pass 1 
+      --target_blocks 13 --save_dir 
+      "memorization_kfac/data/kfac_factors/olmo2_1b" --sample_labels
     deps:
     - path: memorization_kfac/data/collect_kfac_multilayer.py
       hash: md5
@@ -13,27 +15,28 @@ stages:
     outs:
     - path: memorization_kfac/data/kfac_factors/olmo2_1b
       hash: md5
-      md5: d0d28b14ed7ec5d06670b23f42b52182.dir
+      md5: a7555c46b14567ad097449206c1c48b2.dir
       size: 855641173
       nfiles: 2
   collect_kfac_bergson:
-    cmd: 'python memorization_kfac/data/collect_kfac_bergson.py --model allenai/OLMo-2-0425-1B
-      --device cuda --dtype bfloat16 --corpus dolmo --nbytes 10000 --seq_len 512 --batch_size
-      4 --layers_per_pass 1 --target_blocks 13 --save_dir memorization_kfac/data/kfac_factors_bergson
-      --kfac-only '
+    cmd: python memorization_kfac/data/collect_kfac_bergson.py --model 
+      allenai/OLMo-2-0425-1B --device cuda --dtype bfloat16 --corpus dolmo 
+      --nbytes 10000 --seq_len 512 --batch_size 2 --layers_per_pass 1 
+      --target_blocks 13 --save_dir memorization_kfac/data/kfac_factors_bergson 
+      --kfac-only --sample_labels
     deps:
     - path: bergson/hessians/collector.py
       hash: md5
-      md5: 7ec4a98af76a1401e220d45af3713499
-      size: 12606
+      md5: c9dd86822d3fb54a48c54b1b208e5889
+      size: 13015
     - path: bergson/hessians/sharded_computation.py
       hash: md5
       md5: 5b99ad2b95ef61ce034fe092f7f2f04e
       size: 10093
     - path: memorization_kfac/data/collect_kfac_bergson.py
       hash: md5
-      md5: 30876b7d7d104f8b14d29e2248926858
-      size: 12513
+      md5: 5255f9f35bdcfc1386ab0108143bf59a
+      size: 7904
     params:
       params.yaml:
         collect_kfac:
@@ -42,17 +45,17 @@ stages:
           corpus: dolmo
           nbytes: 10000
           seq_len: 512
-          batch_size: 4
+          batch_size: 2
           layers_per_pass: 1
           target_blocks: '13'
-          sample_labels: ''
+          sample_labels: --sample_labels
         model.name: allenai/OLMo-2-0425-1B
     outs:
     - path: memorization_kfac/data/kfac_factors_bergson
       hash: md5
-      md5: ce1e4e8047a6c4b787fb42f852224ee8.dir
-      size: 427819720
-      nfiles: 3
+      md5: d574eb26ff22abbb4cef4792e9be5e32.dir
+      size: 427821481
+      nfiles: 4
   convert_bergson_to_original:
     cmd: python memorization_kfac/data/convert_bergson_to_original.py 
       --bergson_dir memorization_kfac/data/kfac_factors_bergson --output_dir 
