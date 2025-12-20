@@ -132,13 +132,15 @@ class SimpleDataset:
 
     def __getitem__(self, idx):
         if isinstance(idx, (list, slice)):
-            # Handle batch indexing
+            # Handle batch indexing - return a single dict with batched data
             if isinstance(idx, slice):
                 indices = range(*idx.indices(len(self)))
             else:
                 indices = idx
-            return [{"input_ids": self.sequences[i]} for i in indices]
+            # Return single dict with list of sequences
+            return {"input_ids": [self.sequences[i] for i in indices]}
         else:
+            # Single item - return dict with single sequence
             return {"input_ids": self.sequences[idx]}
 
 
