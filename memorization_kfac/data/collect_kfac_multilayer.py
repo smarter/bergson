@@ -37,6 +37,8 @@ def parse():
                    default="kfac_out")
     p.add_argument("--sample_labels", action="store_true",
                    help="If set, use multinomial‑sampled labels")
+    p.add_argument("--seed", type=int, default=42,
+                   help="Random seed for reproducibility")
     return p.parse_args()
 
 # ---------- raw‑shard streaming dataset -----------------------
@@ -125,6 +127,12 @@ def chunked(it, n):
 # ---------- main ----------------------------------------------
 def main():
     a = parse()
+
+    # ----- set random seed for reproducibility ----------------
+    torch.manual_seed(a.seed)
+    random.seed(a.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(a.seed)
 
     # ----- fix device string ("cuda" → "cuda:0") --------------
     if a.device.startswith("cuda") and ":" not in a.device:
