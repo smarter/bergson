@@ -1,5 +1,20 @@
 stages:
   # =============================================================================
+  # Data Preparation
+  # =============================================================================
+
+  prepare_pile10k:
+    cmd:
+      - python memorization_kfac/data/prepare_pile10k.py
+    deps:
+      - memorization_kfac/data/prepare_pile10k.py
+    outs:
+      - memorization_kfac/data/pile10k_None.txt
+    desc: |
+      Download and prepare pile10k dataset from HuggingFace (NeelNanda/pile-10k).
+      This dataset is used for nDCG evaluation in the validation stages.
+
+  # =============================================================================
   # K-FAC Factor Collection (Paper Section 3.2, Equation 1)
   # =============================================================================
   # Reproduces: "We collect these factors for the MLP projections (gate_proj,
