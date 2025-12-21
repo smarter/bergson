@@ -32,24 +32,57 @@ def parse():
 
 
 def load_bergson_covariances(bergson_dir: pathlib.Path):
-    """Load covariances from bergson safetensors format."""
+    """Load covariances from bergson safetensors format.
+
+    Properly handles sharded covariances from distributed training by
+    concatenating row-sharded matrices along dim=0.
+    """
     # Load activation covariances (A matrices)
     A_dict = {}
     act_cov_dir = bergson_dir / "influence_results" / "activation_covariance_sharded"
     if act_cov_dir.exists():
-        for shard_file in sorted(act_cov_dir.glob("shard_*.safetensors")):
-            with safe_open(shard_file, framework="pt", device="cpu") as f:
+        shard_files = sorted(act_cov_dir.glob("shard_*.safetensors"))
+
+        if len(shard_files) == 1:
+            # Single shard - load directly
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
                 for key in f.keys():
                     A_dict[key] = f.get_tensor(key)
+        else:
+            # Multiple shards - concatenate along dim=0 (rows)
+            # First, collect all keys
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+                keys = list(f.keys())
+
+            for key in keys:
+                shards = []
+                for shard_file in shard_files:
+                    with safe_open(shard_file, framework="pt", device="cpu") as f:
+                        shards.append(f.get_tensor(key))
+                A_dict[key] = torch.cat(shards, dim=0)
 
     # Load gradient covariances (G matrices)
     G_dict = {}
     grad_cov_dir = bergson_dir / "influence_results" / "gradient_covariance_sharded"
     if grad_cov_dir.exists():
-        for shard_file in sorted(grad_cov_dir.glob("shard_*.safetensors")):
-            with safe_open(shard_file, framework="pt", device="cpu") as f:
+        shard_files = sorted(grad_cov_dir.glob("shard_*.safetensors"))
+
+        if len(shard_files) == 1:
+            # Single shard - load directly
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
                 for key in f.keys():
                     G_dict[key] = f.get_tensor(key)
+        else:
+            # Multiple shards - concatenate along dim=0 (rows)
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+                keys = list(f.keys())
+
+            for key in keys:
+                shards = []
+                for shard_file in shard_files:
+                    with safe_open(shard_file, framework="pt", device="cpu") as f:
+                        shards.append(f.get_tensor(key))
+                G_dict[key] = torch.cat(shards, dim=0)
 
     # Load metadata
     metadata_path = bergson_dir / "metadata.json"
