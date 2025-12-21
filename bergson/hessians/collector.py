@@ -202,6 +202,9 @@ class CovarianceCollector(HookCollectorBase):
         S_cov = sum over batches of (G^T @ G)  for gradients
 
     where X is input activations [N*S, I] and G is output gradients [N*S, O].
+
+    Note: To be compatible with gradient checkpointing, activations are saved
+    in forward_hook and covariances are computed in backward_hook.
     """
 
     shard_computer: ShardedMul
@@ -213,6 +216,7 @@ class CovarianceCollector(HookCollectorBase):
         """Initialize covariance storage dictionaries."""
         self.A_cov_dict = {}
         self.S_cov_dict = {}
+        self.activation_cache = {}  # Cache activations for use in backward
 
         # Initialize sharded covariance matrices for ALL modules in target_info
         self.shard_computer._init_covariance_dict(
@@ -222,48 +226,49 @@ class CovarianceCollector(HookCollectorBase):
         )
 
     def forward_hook(self, name: str, a: Tensor) -> None:
-        """Compute activation covariance: A^T @ A."""
-        A_cov_ki = self.A_cov_dict[name]
-
-        # a: [N, S, I], valid_masks: [N, S] -> select valid positions
+        """Save activations for computing covariance in backward pass."""
+        # a: [N, S, I], valid_masks: [N, S]
+        # Save valid activations for use in backward_hook
+        # This pattern ensures gradient checkpointing doesn't double-count
         a_bi = a[self.valid_masks]  # [num_valid, I]
-
-        # Compute local covariance
-        local_update_ii = a_bi.mT @ a_bi
-
-        # All-reduce across ranks
-        if dist.is_initialized():
-            dist.all_reduce(local_update_ii, op=dist.ReduceOp.SUM)
-
-        # Extract our shard
-        start_row = self.rank * A_cov_ki.shape[0]
-        end_row = (self.rank + 1) * A_cov_ki.shape[0]
-        update_slice_ki = local_update_ii[start_row:end_row, :]
-
-        # Accumulate
-        A_cov_ki.add_(update_slice_ki)
+        self.activation_cache[name] = a_bi
 
     def backward_hook(self, name: str, g: Tensor) -> None:
-        """Compute gradient covariance: G^T @ G."""
-        S_cov_po = self.S_cov_dict[name]
+        """Compute both activation and gradient covariances using cached activations."""
+        # Retrieve cached activations
+        a_bi = self.activation_cache.get(name)
+        if a_bi is None:
+            return  # Skip if no cached activations
 
-        # Reshape to [N*S, O]
-        g_bo = g.reshape(-1, g.shape[-1])
-
-        # Compute local covariance
-        local_update_oo = g_bo.mT @ g_bo
+        # Compute activation covariance: A^T @ A
+        A_cov_ki = self.A_cov_dict[name]
+        local_update_aa = a_bi.mT @ a_bi
 
         # All-reduce across ranks
         if dist.is_initialized():
-            dist.all_reduce(local_update_oo, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_update_aa, op=dist.ReduceOp.SUM)
 
-        # Extract our shard
+        # Extract our shard and accumulate
+        start_row = self.rank * A_cov_ki.shape[0]
+        end_row = (self.rank + 1) * A_cov_ki.shape[0]
+        A_cov_ki.add_(local_update_aa[start_row:end_row, :])
+
+        # Compute gradient covariance: G^T @ G
+        S_cov_po = self.S_cov_dict[name]
+        g_bo = g.reshape(-1, g.shape[-1])
+        local_update_gg = g_bo.mT @ g_bo
+
+        # All-reduce across ranks
+        if dist.is_initialized():
+            dist.all_reduce(local_update_gg, op=dist.ReduceOp.SUM)
+
+        # Extract our shard and accumulate
         start_row = self.rank * S_cov_po.shape[0]
         end_row = (self.rank + 1) * S_cov_po.shape[0]
-        update_slice_po = local_update_oo[start_row:end_row, :]
+        S_cov_po.add_(local_update_gg[start_row:end_row, :])
 
-        # Accumulate
-        S_cov_po.add_(update_slice_po)
+        # Clear cache to free memory
+        del self.activation_cache[name]
 
     def teardown(self) -> None:
         """Save covariance matrices to disk."""

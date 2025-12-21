@@ -171,6 +171,8 @@ def main():
         trust_remote_code=True,
     )
 
+    # Enable gradient checkpointing to reduce memory usage during forward pass
+    model.gradient_checkpointing_enable()
     model.enable_input_require_grads()
     model.config.use_cache = False
     model.train()
