@@ -37,14 +37,14 @@ class ShardedMul:
             in_dim = weight_shape[1]
             shard_in_dim = in_dim if not self.dist else in_dim // self.world_size
             activation_covariance_dict[name] = torch.zeros(
-                (shard_in_dim, in_dim), device=self.device, dtype=dtype
+                (shard_in_dim, in_dim), device=self.device, dtype=torch.float32
             )
 
             # Gradient covariance G^T G has shape [out_dim, out_dim]
             out_dim = weight_shape[0]
             shard_out_dim = out_dim if not self.dist else out_dim // self.world_size
             gradient_covariance_dict[name] = torch.zeros(
-                (shard_out_dim, out_dim), device=self.device, dtype=dtype
+                (shard_out_dim, out_dim), device=self.device, dtype=torch.float32
             )
 
     def _matmul(
