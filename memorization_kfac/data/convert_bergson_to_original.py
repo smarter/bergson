@@ -98,34 +98,31 @@ def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.P
     print(f"Total valid positions: {total_processed:,}")
     print(f"Blocks: {blocks}")
 
-    # Group by block
-    block_data = {}
+    # Combine all blocks into a single dictionary (matching original format)
+    combined_data = {}
     for bergson_key in A_dict.keys():
         original_key = convert_key_name(bergson_key)
-
-        # Extract block number
-        block_num = int(original_key.split(".")[0].replace("blk", ""))
-
-        if block_num not in block_data:
-            block_data[block_num] = {}
 
         # Normalize matrices by total_processed (valid positions only)
         A_normalized = A_dict[bergson_key].float() / total_processed
         G_normalized = G_dict[bergson_key].float() / total_processed
 
-        block_data[block_num][original_key] = {
+        combined_data[original_key] = {
             "A": A_normalized,
             "G": G_normalized,
             "n_tokens": total_processed,  # Store as n_tokens for compatibility
         }
 
-    # Save one file per block (matching original format)
+    # Save single file with all blocks combined (matching eval_mem_kfac.py expectations)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for block_num, data in sorted(block_data.items()):
-        output_file = output_dir / f"kfac_factors_blk_{block_num}.pt"
-        torch.save(data, output_file)
-        print(f"✓ Saved {output_file} ({len(data)} projections)")
+    # Create filename: kfac_factors_blk_23_24_25.pt for blocks [23, 24, 25]
+    blocks_str = "_".join(map(str, sorted(blocks)))
+    output_file = output_dir / f"kfac_factors_blk_{blocks_str}.pt"
+
+    torch.save(combined_data, output_file)
+    print(f"✓ Saved {output_file} ({len(combined_data)} projections)")
+    print(f"  Keys: {list(combined_data.keys())}")
 
     print(f"\n✓ Conversion complete! Output saved to {output_dir}")
 
