@@ -217,6 +217,18 @@ class EkfacComputer:
         return prof
 
     def _collector(self, collector, desc: Optional[str] = None):
+        # Memory optimization: disable gradients for all non-target layers
+        # This prevents PyTorch from storing intermediate activations for layers we don't need
+        for p in self.model.parameters():
+            p.requires_grad_(False)
+
+        # Enable gradients only for target layer weights
+        # Note: target_info names are relative to model.base_model
+        for name in self.target_info:
+            layer = self.model.base_model.get_submodule(name)
+            if hasattr(layer, 'weight') and isinstance(layer.weight, torch.nn.Parameter):
+                layer.weight.requires_grad_(True)
+
         total_processed = torch.tensor(0, device=self.model.device)
         prof = self._setup_profiler()
         step = 0
