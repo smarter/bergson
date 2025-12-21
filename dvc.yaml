@@ -146,7 +146,8 @@ stages:
         --layers_per_pass 1
         --target_blocks 23 24 25
         --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
-        --kfac-only
+        --sample_labels
+        #--kfac-only
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
       - bergson/hessians/collector.py
@@ -401,6 +402,30 @@ stages:
       - memorization_kfac/metrics_sample/kfac_eval_log_7b_table1_7b.jsonl:
           cache: false
 
+  paper_table1_7b_bergson:
+    #CUDA_VISIBLE_DEVICES=0
+    cmd: >-
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson
+      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size 7b
+      --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      --use-cache
+      --perplexity
+      --results-dir memorization_kfac/metrics_bergson
+      --results-tag table1_7b
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
+      - memorization_kfac/data/pile10k_None.txt
+      - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+    outs:
+      - memorization_kfac/cache/kfac_weights_paper_bergson:
+          cache: true
+    metrics:
+      - memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl:
+          cache: false
+
 
   paper_table1_1b:
     cmd: >-
@@ -500,6 +525,21 @@ stages:
       - Quotes: strict_acc, loose_acc, avg_levenshtein
       - Perplexity (Pile 10k)
       - nDCG@10
+
+  validate_table1_7b_bergson:
+    cmd: >-
+      python memorization_kfac/evaluations/validate_paper_results.py
+      --results-file memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl
+      --model-size 7b
+      --tolerance 0.05
+      --output memorization_kfac/metrics_bergson/validation_table1_7b.json
+    deps:
+      - memorization_kfac/evaluations/validate_paper_results.py
+      - memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl
+    metrics:
+      - memorization_kfac/metrics_bergson/validation_table1_7b.json:
+          cache: false
+
 
   validate_table1_1b:
     cmd: >-
