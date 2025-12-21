@@ -272,7 +272,6 @@ class EkfacComputer:
                     self.model.zero_grad()
                     if torch.cuda.is_available():
                         torch.cuda.synchronize()
-                        torch.cuda.empty_cache()  # Free fragmented memory
 
                 if self.cfg.profile:
                     assert isinstance(prof, profile), "Profiler is not set up correctly"
