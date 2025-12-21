@@ -254,9 +254,10 @@ class CovarianceCollector(HookCollectorBase):
         A_cov_ki.add_(local_update_aa[start_row:end_row, :])
 
         # Compute gradient covariance: G^T @ G
+        # IMPORTANT: Filter gradients by valid_masks just like activations
         S_cov_po = self.S_cov_dict[name]
-        g_bo = g.reshape(-1, g.shape[-1])
-        local_update_gg = g_bo.mT @ g_bo
+        g_bi = g[self.valid_masks]  # [num_valid, O] - same filtering as activations
+        local_update_gg = g_bi.mT @ g_bi
 
         # All-reduce across ranks
         if dist.is_initialized():

@@ -169,9 +169,7 @@ stages:
 
   convert_bergson_paper_7b:
     cmd: >-
-      python memorization_kfac/data/convert_bergson_to_original.py
-      --bergson_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
-      --output_dir memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_7b
+      python memorization_kfac/data/convert_bergson_to_original.py --bergson_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b --output_dir memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_7b
     deps:
       - memorization_kfac/data/convert_bergson_to_original.py
       - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
@@ -290,7 +288,6 @@ stages:
       --layers_per_pass ${collect_kfac.layers_per_pass}
       --target_blocks ${collect_kfac.target_blocks}
       --save_dir memorization_kfac/data/kfac_factors_bergson
-      --kfac-only
       ${collect_kfac.sample_labels}
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
@@ -405,15 +402,7 @@ stages:
   paper_table1_7b_bergson:
     #CUDA_VISIBLE_DEVICES=0
     cmd: >-
-      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson
-      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson
-      python memorization_kfac/evaluations/eval_mem_kfac.py
-      --model-size 7b
-      --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
-      --use-cache
-      --perplexity
-      --results-dir memorization_kfac/metrics_bergson
-      --results-tag table1_7b
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson python memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}' --use-cache --perplexity --results-dir memorization_kfac/metrics_bergson --results-tag table1_7b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
