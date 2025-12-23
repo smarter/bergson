@@ -203,6 +203,7 @@ def worker_wrapper(
     worker_fn: Callable,
     setup_model: bool = True,
     setup_processor: bool = True,
+    target_modules: set | None = None,
 ):
     try:
         if torch.cuda.is_available():
@@ -226,7 +227,7 @@ def worker_wrapper(
             )
 
         # Initialize defaults for optional components
-        model, target_modules, processor = None, None, None
+        model, processor = None, None
 
         if setup_model:
             match cfg.precision:
@@ -245,7 +246,9 @@ def worker_wrapper(
                 case other:
                     raise ValueError(f"Unsupported precision: {other}")
 
-            model, target_modules = setup_model_and_peft(cfg, rank, dtype)
+            model, peft_target_modules = setup_model_and_peft(cfg, rank, dtype)
+            if target_modules is None:
+                target_modules = peft_target_modules
 
         if setup_processor:
             if model is None:
@@ -288,6 +291,8 @@ def distributed_computing(
     setup_data: bool = True,
     setup_model: bool = True,
     setup_processor: bool = True,
+    dataset: Dataset | None = None,
+    target_modules: set | None = None,
 ):
     # save cfg as json
     if cfg.apply_ekfac:
@@ -302,13 +307,16 @@ def distributed_computing(
     # Setup data pipeline if requested
     if setup_data:
         ds = setup_data_pipeline(cfg)
+    elif dataset is not None:
+        # Use provided dataset directly
+        ds = dataset
     else:
         # Create empty dataset for compatibility
         ds = assert_type(Dataset, Dataset.from_list([]))
 
     world_size = torch.cuda.device_count() if cfg.world_size is None else cfg.world_size
     if world_size <= 1:
-        worker_wrapper(0, 1, cfg, ds, worker_fn, setup_model, setup_processor)
+        worker_wrapper(0, 1, cfg, ds, worker_fn, setup_model, setup_processor, target_modules)
     else:
         # Set up multiprocessing and distributed training
         mp.set_sharing_strategy("file_system")
@@ -324,7 +332,7 @@ def distributed_computing(
                 "build",
                 worker_wrapper,
                 args={
-                    i: (i, world_size, cfg, ds, worker_fn, setup_model, setup_processor)
+                    i: (i, world_size, cfg, ds, worker_fn, setup_model, setup_processor, target_modules)
                     for i in range(world_size)
                 },
                 envs={

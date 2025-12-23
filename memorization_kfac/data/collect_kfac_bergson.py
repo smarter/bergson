@@ -4,27 +4,23 @@ K-FAC factor collection using bergson's EKFAC implementation.
 
 This script provides the same CLI interface as collect_kfac_multilayer.py
 but uses bergson's covariance collection infrastructure with proper valid_mask handling.
+
+It additionally support multiple GPUs via the --world_size and --fsdp flags.
 """
 import argparse
 import json
-import os
 import pathlib
 import random
-from typing import Optional
 
 import torch
-import torch.nn.functional as F
+import torch.distributed as dist
 from datasets import Dataset, load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 from tqdm.auto import tqdm
 
-from bergson.data import IndexConfig, DataConfig
+from bergson.data import IndexConfig
+from bergson.distributed import distributed_computing
 from bergson.hessians.ekfac_compute import EkfacComputer
-from bergson.hessians.collector import HookCollectorBase
-from bergson.hessians.sharded_computation import ShardedMul
-import torch.distributed as dist
-from dataclasses import dataclass
-from torch import Tensor
 
 
 def parse():
@@ -58,197 +54,159 @@ def parse():
         action="store_true",
         help="If set, use multinomial-sampled labels",
     )
-    p.add_argument(
-        "--kfac-only",
-        action="store_true",
-        dest="kfac_only",
-        help="Use KFAC (covariances only) instead of EKFAC (with eigenvalue correction). "
-        "When enabled, only CovarianceCollector is used without LambdaCollector.",
-    )
     p.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    p.add_argument(
+        "--world_size",
+        type=int,
+        default=None,
+        help="Number of GPUs to use. If None, uses all available GPUs when --fsdp is set, otherwise uses 1.",
+    )
+    p.add_argument(
+        "--fsdp",
+        action="store_true",
+        help="Use Fully Sharded Data Parallel (FSDP) for multi-GPU training.",
+    )
     return p.parse_args()
 
 
-class StreamingDataset:
-    """Simple streaming dataset wrapper for bergson."""
+def collect_sequences(corpus: str, tokenizer, seq_len: int, nbytes: int) -> list[list[int]]:
+    """Collect fixed-length sequences from a streaming dataset."""
+    HF_DATASETS = {
+        "olmo": "allenai/olmo-mix-1124",
+        "dolmo": "allenai/dolmino-mix-1124",
+    }
 
-    def __init__(self, corpus: str, tokenizer, seq_len: int, nbytes: int):
-        self.tok = tokenizer
-        self.seq_len = seq_len
-        self.budget = nbytes
+    if corpus == "olmo":
+        from datasets import Features, Value
 
-        HF_DATASETS = {
-            "olmo": "allenai/olmo-mix-1124",
-            "dolmo": "allenai/dolmino-mix-1124",
-        }
+        ds = load_dataset(
+            "json",
+            data_files={
+                "train": f"hf://datasets/{HF_DATASETS[corpus]}/data/**/*.json*"
+            },
+            split="train",
+            streaming=True,
+            features=Features({"text": Value("string")}),
+        )
+    else:
+        ds = load_dataset(
+            "json",
+            data_files={
+                "train": f"hf://datasets/{HF_DATASETS[corpus]}/data/**/*.json*"
+            },
+            split="train",
+            streaming=True,
+        )
 
-        # Load streaming dataset
-        if corpus == "olmo":
-            from datasets import Features, Value
+    sequences = []
+    buf, seen = [], 0
+    for sample in tqdm(ds, desc="Loading sequences"):
+        txt = sample["text"].strip()
+        if not txt:
+            continue
+        seen += len(txt.encode())
+        buf.extend(tokenizer(txt, add_special_tokens=False).input_ids)
 
-            self.ds = load_dataset(
-                "json",
-                data_files={
-                    "train": f"hf://datasets/{HF_DATASETS[corpus]}/data/**/*.json*"
-                },
-                split="train",
-                streaming=True,
-                features=Features({"text": Value("string")}),
-            )
-        else:  # dolmo
-            self.ds = load_dataset(
-                "json",
-                data_files={
-                    "train": f"hf://datasets/{HF_DATASETS[corpus]}/data/**/*.json*"
-                },
-                split="train",
-                streaming=True,
-            )
+        while len(buf) >= seq_len:
+            sequences.append(buf[:seq_len])
+            buf = buf[seq_len:]
 
-    def __iter__(self):
-        """Yield sequences of token IDs."""
-        buf, seen = [], 0
-        for sample in self.ds:
-            txt = sample["text"].strip()
-            if not txt:
-                continue
-            seen += len(txt.encode())
-            buf.extend(self.tok(txt, add_special_tokens=False).input_ids)
+        if seen >= nbytes:
+            break
 
-            while len(buf) >= self.seq_len:
-                yield buf[: self.seq_len]
-                buf = buf[self.seq_len :]
-
-            if seen >= self.budget:
-                return
+    return sequences
 
 
-class SimpleDataset:
-    """Simple dataset wrapper for EkfacComputer that holds pre-tokenized sequences."""
+def kfac_worker(
+    model, ds, processor, *, batches, target_modules, cfg
+):
+    """Worker function for KFAC collection."""
 
-    def __init__(self, sequences: list[list[int]]):
-        self.sequences = sequences
+    model.gradient_checkpointing_enable()
+    #model.enable_input_require_grads()
+    #model.config.use_cache = False
 
-    def __len__(self):
-        return len(self.sequences)
-
-    def __getitem__(self, idx):
-        if isinstance(idx, (list, slice)):
-            # Handle batch indexing - return a single dict with batched data
-            if isinstance(idx, slice):
-                indices = range(*idx.indices(len(self)))
-            else:
-                indices = idx
-            # Return single dict with list of sequences
-            return {"input_ids": [self.sequences[i] for i in indices]}
-        else:
-            # Single item - return dict with single sequence
-            return {"input_ids": self.sequences[idx]}
+    ekfac = EkfacComputer(
+        model=model,
+        data=ds,
+        batches=batches,
+        target_modules=target_modules,
+        cfg=cfg,
+    )
+    ekfac.compute_covariance()
 
 
 def main():
     args = parse()
+    args.save_dir.mkdir(parents=True, exist_ok=True)
 
-    # Set random seed for reproducibility
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
-    # Fix device string
-    if args.device.startswith("cuda") and ":" not in args.device:
-        args.device = "cuda:0"
+    if args.world_size is not None:
+        world_size = args.world_size
+    elif args.fsdp:
+        world_size = torch.cuda.device_count()
+    else:
+        world_size = 1
 
-    # Load tokenizer
+    print(f"Streaming ~{args.nbytes / 1e6:.0f}MB from {args.corpus}")
+
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
 
-    # Load model
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model,
-        torch_dtype=getattr(torch, args.dtype),
-        device_map={"": args.device},
-        trust_remote_code=True,
-    )
-
-    # Enable gradient checkpointing to reduce memory usage during forward pass
-    model.gradient_checkpointing_enable()
-    model.enable_input_require_grads()
-    model.config.use_cache = False
-    model.train()
-
-    # Disable dropout
-    for m in model.modules():
-        if isinstance(m, torch.nn.Dropout):
-            m.p = 0.0
-
-    # Create save directory
-    args.save_dir.mkdir(parents=True, exist_ok=True)
-
-    method = "KFAC" if args.kfac_only else "EKFAC"
-    print(f"Using {method} method (kfac_only={args.kfac_only})")
-    print(f"Processing blocks: {args.target_blocks}")
-    print(f"Streaming ~{args.nbytes / 1e6:.0f}MB from {args.corpus}")
-
-    # Collect sequences from streaming dataset
-    print("Collecting sequences from streaming dataset...")
-    streaming_ds = StreamingDataset(args.corpus, tokenizer, args.seq_len, args.nbytes)
-    sequences = list(tqdm(streaming_ds, desc="Loading sequences"))
+    sequences = collect_sequences(args.corpus, tokenizer, args.seq_len, args.nbytes)
     print(f"Collected {len(sequences)} sequences")
 
-    # Create dataset wrapper
-    dataset = SimpleDataset(sequences)
+    # length column required by allocate_batches
+    hf_dataset = Dataset.from_dict({
+        "input_ids": sequences,
+        "length": [args.seq_len] * len(sequences),
+    })
 
-    # Create batches as lists of indices
-    batches = []
-    for i in range(0, len(sequences), args.batch_size):
-        batches.append(list(range(i, min(i + args.batch_size, len(sequences)))))
+    precision_map = {"bfloat16": "bf16", "float32": "fp32", "float16": "fp16"}
 
-    # Prepare target modules (gate, up, down projections for specified blocks)
-    # Note: EkfacComputer uses model.base_model internally, so names should not include "model." prefix
+    idx_config = IndexConfig(
+        run_path=str(args.save_dir),
+        model=args.model,
+        fsdp=args.fsdp,
+        precision=precision_map.get(args.dtype, "bf16"),
+        token_batch_size=args.batch_size * args.seq_len,
+        data=None,
+        sample=args.sample_labels,
+        world_size=world_size if world_size > 1 else None,
+    )
+
     target_modules = set()
     for blk in args.target_blocks:
         target_modules.add(f"layers.{blk}.mlp.gate_proj")
         target_modules.add(f"layers.{blk}.mlp.up_proj")
         target_modules.add(f"layers.{blk}.mlp.down_proj")
 
-    # Create IndexConfig
-    idx_config = IndexConfig(
-        run_path=args.save_dir,
-        data=None,
-        sample=args.sample_labels,
-    )
-
-    # Use EkfacComputer directly - it handles all the logic!
-    print(f"Computing {method} using EkfacComputer...")
-    ekfac = EkfacComputer(
-        model=model,
-        data=dataset,
-        batches=batches,
-        target_modules=target_modules,
+    distributed_computing(
         cfg=idx_config,
+        worker_fn=kfac_worker,
+        setup_data=False,
+        setup_model=True,
+        setup_processor=True, # We don't use the processor, but this is needed for `distributed_computing` to call `worker_fn` with the right arguments
+        dataset=hf_dataset,
+        target_modules=target_modules,
     )
 
-    # Compute covariances (handles valid_mask, total_processed, etc.)
-    # total_processed is saved to disk at influence_results/total_processed_covariances.pt
-    ekfac.compute_covariance()
-
-    # Save metadata with batch information for conversion to original format
     metadata = {
-        "blocks": args.target_blocks,
+        "target_modules": sorted(target_modules),
         "format": "bergson",
-        "kfac_only": args.kfac_only,
-        "method": method,
-        "num_batches": len(batches),
         "batch_size": args.batch_size,
         "seq_len": args.seq_len,
+        "world_size": world_size,
+        "fsdp": args.fsdp,
     }
-
     with open(args.save_dir / "metadata.json", "w") as f:
         json.dump(metadata, indent=2, fp=f)
 
-    print(f"✓ Saved {method} factors for blocks {args.target_blocks}")
-    print("✓ Collection complete using bergson")
+    print(f"Saved {method} factors for blocks {args.target_blocks}")
 
 
 if __name__ == "__main__":
