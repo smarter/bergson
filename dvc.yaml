@@ -402,10 +402,10 @@ stages:
   paper_table1_7b_bergson:
     #CUDA_VISIBLE_DEVICES=0
     cmd: >-
-      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson_corrected MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson python memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}' --refresh-cache --perplexity --results-dir memorization_kfac/metrics_bergson --results-tag table1_7b
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson_converted MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson python memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}' --refresh-cache --perplexity --results-dir memorization_kfac/metrics_bergson --results-tag table1_7b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
-      - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
+      - memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_7b
       - memorization_kfac/data/pile10k_None.txt
       - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
     outs:
