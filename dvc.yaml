@@ -344,7 +344,7 @@ stages:
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 7b
       --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
-      --refresh-cache
+      --use-cache --refresh-cache
       --perplexity
       --results-dir memorization_kfac/metrics
       --results-tag table1_7b
@@ -383,7 +383,7 @@ stages:
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 7b
       --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
-      --refresh-cache
+      --use-cache --refresh-cache
       --perplexity
       --results-dir memorization_kfac/metrics_sample
       --results-tag table1_7b
@@ -402,7 +402,7 @@ stages:
   paper_table1_7b_bergson:
     #CUDA_VISIBLE_DEVICES=0
     cmd: >-
-      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson_converted MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson python memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}' --refresh-cache --perplexity --results-dir memorization_kfac/metrics_bergson --results-tag table1_7b
+      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson_converted MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson python memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}' --use-cache --refresh-cache --perplexity --results-dir memorization_kfac/metrics_bergson --results-tag table1_7b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_7b
@@ -424,7 +424,7 @@ stages:
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 1b
       --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
-      --refresh-cache
+      --use-cache --refresh-cache
       --perplexity
       --results-dir memorization_kfac/metrics
       --results-tag table1_1b
@@ -463,7 +463,7 @@ stages:
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 1b
       --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
-      --refresh-cache
+      --use-cache --refresh-cache
       --perplexity
       --results-dir memorization_kfac/metrics_sample
       --results-tag table1_1b
@@ -697,7 +697,7 @@ stages:
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size ${model.size}
       --layers-json ${kfac_edit.layers_json}
-      --refresh-cache
+      --use-cache --refresh-cache
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
