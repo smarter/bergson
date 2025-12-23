@@ -151,7 +151,7 @@ def _build_ptcache_perplexity_loader(tokenizer, clean_pt_path: str, block_size: 
             raw = torch.cat([raw, pad], dim=1)
     mid = max(raw.size(0) // 2, 1)
     perp_tensor = raw[:mid]
-    return DataLoader(perp_tensor, batch_size=batch_size, shuffle=False)
+    return DataLoader(perp_tensor, batch_size=96, shuffle=False)
 
 
 def apply_kfac_to_layer(model,
