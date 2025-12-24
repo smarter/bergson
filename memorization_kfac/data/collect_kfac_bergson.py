@@ -122,9 +122,12 @@ def kfac_worker(
     model, data, processor, *, batches, target_modules, cfg
 ):
     """Worker function for KFAC collection."""
-    model.gradient_checkpointing_enable()
-    #model.enable_input_require_grads()
-    #model.config.use_cache = False
+    # gradient_checkpointing_enable() seems to cause FSDP to get stuck?
+    # TODO: Replace with seemingly equivalent fsdp activation_checkpointing
+    if not cfg.fsdp:
+      #model.enable_input_require_grads()
+      model.config.use_cache = False # Needed with gradient checkpointing? https://github.com/huggingface/transformers/issues/34928#issuecomment-2501970174
+      model.gradient_checkpointing_enable()
 
     compute_all_factors(model, data, processor, batches=batches, target_modules=target_modules, cfg=cfg)
 
