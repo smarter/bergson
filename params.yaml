@@ -22,6 +22,7 @@ collect_kfac:
   batch_size: 1 #2 #4 #16  # Increased for more efficient processing
 
   paper_7b_bergson:
+    dtype: "bfloat16"  # choices: float32, bfloat16
     batch_size: 24
 
   # Layer processing

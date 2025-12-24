@@ -101,7 +101,7 @@ stages:
       - python memorization_kfac/data/collect_kfac_bergson.py
         --model allenai/OLMo-2-1124-7B
         --device cuda
-        --dtype bfloat16
+        --dtype ${collect_kfac.paper_7b_bergson.dtype}
         --corpus dolmo
         --nbytes 100000000
         --seq_len 512
