@@ -21,6 +21,9 @@ collect_kfac:
   seq_len: 512
   batch_size: 1 #2 #4 #16  # Increased for more efficient processing
 
+  paper_7b_bergson:
+    batch_size: 24
+
   # Layer processing
   layers_per_pass: 1  # Process this many layers before flushing
   target_blocks: "13" # 14 15"  # Multiple layers for better comparison coverage

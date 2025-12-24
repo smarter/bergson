@@ -105,7 +105,7 @@ stages:
         --corpus dolmo
         --nbytes 100000000
         --seq_len 512
-        --batch_size 24
+        --batch_size ${collect_kfac.paper_7b_bergson.batch_size}
         --layers_per_pass 1
         --target_blocks 23 24 25
         --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
