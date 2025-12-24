@@ -9,6 +9,10 @@ collect_kfac:
   device: "cuda"
   dtype: "bfloat16"  # choices: float32, bfloat16
 
+  # Multi-GPU settings (bergson only)
+  fsdp: ""  # Set to "--fsdp" to enable FSDP
+  world_size: ""  # Set to "--world_size N" to specify GPU count
+
   # Data settings
   corpus: "dolmo"  # choices: olmo, dolmo
   # nbytes: 10000000  # ~10MB of text data (~2M tokens) for comparison

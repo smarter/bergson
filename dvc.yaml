@@ -110,6 +110,8 @@ stages:
         --target_blocks 23 24 25
         --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
         --sample_labels
+        ${collect_kfac.fsdp}
+        ${collect_kfac.world_size}
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
       - bergson/hessians/collector.py
@@ -182,6 +184,8 @@ stages:
         --target_blocks 13 14 15
         --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
         --sample_labels
+        ${collect_kfac.fsdp}
+        ${collect_kfac.world_size}
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
       - bergson/hessians/collector.py
@@ -251,10 +255,13 @@ stages:
       --target_blocks ${collect_kfac.target_blocks}
       --save_dir memorization_kfac/data/kfac_factors_bergson
       ${collect_kfac.sample_labels}
+      ${collect_kfac.fsdp}
+      ${collect_kfac.world_size}
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
       - bergson/hessians/collector.py
       - bergson/hessians/sharded_computation.py
+      - bergson/hessians/ekfac_compute.py
     params:
       - model.name
       - collect_kfac
