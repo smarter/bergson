@@ -231,8 +231,7 @@ class CovarianceCollector(HookCollectorBase):
         # Save valid activations for use in backward_hook
         # This pattern ensures gradient checkpointing doesn't double-count
         a_bi = a[self.valid_masks]  # [num_valid, I]
-        # Convert to float32 to match original implementation and avoid bfloat16 numerical issues
-        self.activation_cache[name] = a_bi.float()
+        self.activation_cache[name] = a_bi
 
     def backward_hook(self, name: str, g: Tensor) -> None:
         """Compute both activation and gradient covariances using cached activations."""
@@ -256,7 +255,7 @@ class CovarianceCollector(HookCollectorBase):
 
         # Compute gradient covariance: G^T @ G
         S_cov_po = self.S_cov_dict[name]
-        g_bo = g.reshape(-1, g.shape[-1]).float() # Convert to float32
+        g_bo = g.reshape(-1, g.shape[-1])
         local_update_gg = g_bo.mT @ g_bo
 
         # All-reduce across ranks
