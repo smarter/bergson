@@ -154,8 +154,7 @@ stages:
       - memorization_kfac/data/kfac_factors_paper/olmo2_7b
       - memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_7b
     metrics:
-      - memorization_kfac/metrics/kfac_comparison_paper_7b.json:
-          cache: false
+      - memorization_kfac/metrics/kfac_comparison_paper_7b.json
     desc: |
       Compare K-FAC factors from original vs bergson implementations (7B paper settings).
 
@@ -229,8 +228,7 @@ stages:
       - memorization_kfac/data/kfac_factors_paper/olmo2_1b
       - memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_1b
     metrics:
-      - memorization_kfac/metrics/kfac_comparison_paper_1b.json:
-          cache: false
+      - memorization_kfac/metrics/kfac_comparison_paper_1b.json
     desc: |
       Compare K-FAC factors from original vs bergson implementations (1B paper settings).
 
@@ -320,11 +318,9 @@ stages:
       - memorization_kfac/data/pile10k_None.txt
       - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
     outs:
-      - memorization_kfac/cache/kfac_weights_paper_7b:
-          cache: true
+      - memorization_kfac/cache/kfac_weights_paper_7b
     metrics:
-      - memorization_kfac/metrics/kfac_eval_log_7b_table1_7b.jsonl:
-          cache: false
+      - memorization_kfac/metrics/kfac_eval_log_7b_table1_7b.jsonl
     desc: |
       Paper Table 1 (7B model, all columns): Apply K-FAC edit and evaluate.
 
@@ -358,11 +354,9 @@ stages:
       - memorization_kfac/data/pile10k_None.txt
       - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
     outs:
-      - memorization_kfac/cache/kfac_weights_paper_bergson:
-          cache: true
+      - memorization_kfac/cache/kfac_weights_paper_bergson
     metrics:
-      - memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl:
-          cache: false
+      - memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl
     desc: |
       Paper Table 1 (7B model) using bergson factors directly.
       Uses --bergson-factors to load pre-computed eigenvectors, bypassing conversion.
@@ -386,11 +380,9 @@ stages:
       - memorization_kfac/data/pile10k_None.txt
       - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
     outs:
-      - memorization_kfac/cache/kfac_weights_paper_1b:
-          cache: true
+      - memorization_kfac/cache/kfac_weights_paper_1b
     metrics:
-      - memorization_kfac/metrics/kfac_eval_log_1b_table1_1b.jsonl:
-          cache: false
+      - memorization_kfac/metrics/kfac_eval_log_1b_table1_1b.jsonl
     desc: |
       Paper Table 5 (Appendix F, 1B model): Apply K-FAC edit and evaluate.
 
@@ -424,11 +416,9 @@ stages:
       - memorization_kfac/data/pile10k_None.txt
       - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
     outs:
-      - memorization_kfac/cache/kfac_weights_paper_bergson_1b:
-          cache: true
+      - memorization_kfac/cache/kfac_weights_paper_bergson_1b
     metrics:
-      - memorization_kfac/metrics_bergson/kfac_eval_log_1b_table1_1b.jsonl:
-          cache: false
+      - memorization_kfac/metrics_bergson/kfac_eval_log_1b_table1_1b.jsonl
     desc: |
       Paper Table 5 (1B model) using bergson factors directly.
       Uses --bergson-factors to load pre-computed eigenvectors, bypassing conversion.
@@ -451,8 +441,7 @@ stages:
       - memorization_kfac/evaluations/validate_paper_results.py
       - memorization_kfac/metrics/kfac_eval_log_7b_table1_7b.jsonl
     metrics:
-      - memorization_kfac/metrics/validation_table1_7b.json:
-          cache: false
+      - memorization_kfac/metrics/validation_table1_7b.json
     desc: |
       Validate Table 1 (7B) results against paper values.
 
@@ -480,8 +469,7 @@ stages:
       - memorization_kfac/evaluations/validate_paper_results.py
       - memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl
     metrics:
-      - memorization_kfac/metrics_bergson/validation_table1_7b.json:
-          cache: false
+      - memorization_kfac/metrics_bergson/validation_table1_7b.json
 
 
   validate_table1_1b:
@@ -495,8 +483,7 @@ stages:
       - memorization_kfac/evaluations/validate_paper_results.py
       - memorization_kfac/metrics/kfac_eval_log_1b_table1_1b.jsonl
     metrics:
-      - memorization_kfac/metrics/validation_table1_1b.json:
-          cache: false
+      - memorization_kfac/metrics/validation_table1_1b.json
     desc: |
       Validate Table 5/Appendix F (1B) results against paper values.
 
@@ -522,8 +509,7 @@ stages:
       - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
       - memorization_kfac/data/kfac_factors_paper/olmo2_7b
     plots:
-      - memorization_kfac/plots/figure2_7b:
-          cache: false
+      - memorization_kfac/plots/figure2_7b
     desc: |
       Paper Figure 2 (Section 4): K-FAC eigenvector activation ratios for 7B model.
 
@@ -560,8 +546,7 @@ stages:
       - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
       - memorization_kfac/data/kfac_factors_paper/olmo2_1b
     plots:
-      - memorization_kfac/plots/figure2_1b:
-          cache: false
+      - memorization_kfac/plots/figure2_1b
     desc: |
       Paper Figure 2 (Section 4): K-FAC eigenvector activation ratios for 1B model.
       Same analysis as 7B but for smaller model.
@@ -581,8 +566,7 @@ stages:
     deps:
       - memorization_kfac/evaluations/eval_benchmarks.py
     metrics:
-      - memorization_kfac/metrics/benchmarks_baseline_7b.json:
-          cache: false
+      - memorization_kfac/metrics/benchmarks_baseline_7b.json
     desc: |
       Paper Tables 8-10 (Appendix I, Baseline column): Evaluate baseline OLMo-2 7B
       on multiple benchmarks using OLMES suite.
@@ -599,8 +583,7 @@ stages:
       - memorization_kfac/evaluations/eval_benchmarks.py
       - memorization_kfac/models/kfac_edited_7b
     metrics:
-      - memorization_kfac/metrics/benchmarks_kfac_7b.json:
-          cache: false
+      - memorization_kfac/metrics/benchmarks_kfac_7b.json
     desc: |
       Paper Tables 8-10 (Appendix I, K-FAC column): Evaluate K-FAC edited model.
       Expected results show: TriviaQA (0.648), Relations (64.390), GSM8K (0.447),
@@ -615,8 +598,7 @@ stages:
     deps:
       - memorization_kfac/evaluations/eval_simplemath.py
     metrics:
-      - memorization_kfac/metrics/simplemath_baseline_7b.json:
-          cache: false
+      - memorization_kfac/metrics/simplemath_baseline_7b.json
     desc: |
       Paper Section 6 (SimpleMath dataset): Evaluate baseline on two-digit
       addition/subtraction problems fed 5-shot.
@@ -631,8 +613,7 @@ stages:
       - memorization_kfac/evaluations/eval_simplemath.py
       - memorization_kfac/models/kfac_edited_7b
     metrics:
-      - memorization_kfac/metrics/simplemath_kfac_7b.json:
-          cache: false
+      - memorization_kfac/metrics/simplemath_kfac_7b.json
     desc: |
       Paper Figure 3: SimpleMath performance after K-FAC edit.
       Expected to show large drop (66-74% retention), demonstrating that
@@ -652,8 +633,7 @@ stages:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
     metrics:
-      - memorization_kfac/metrics/kfac_eval_results.json:
-          cache: false
+      - memorization_kfac/metrics/kfac_eval_results.json
     desc: |
       Apply K-FAC curvature-based weight editing and evaluate memorization.
       Keeps top curvature mass to suppress memorization while
@@ -687,8 +667,7 @@ stages:
       - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
       - memorization_kfac/data/kfac_factors_bergson_converted
     metrics:
-      - memorization_kfac/metrics/kfac_comparison_results.json:
-          cache: false
+      - memorization_kfac/metrics/kfac_comparison_results.json
     desc: |
       Compare K-FAC factors from original and bergson implementations.
       Computes similarity metrics:
