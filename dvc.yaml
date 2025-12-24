@@ -262,9 +262,6 @@ stages:
       - bergson/hessians/collector.py
       - bergson/hessians/sharded_computation.py
       - bergson/hessians/ekfac_compute.py
-    params:
-      - model.name
-      - collect_kfac
     outs:
       - memorization_kfac/data/kfac_factors_bergson
     desc: |
@@ -583,8 +580,6 @@ stages:
       --output memorization_kfac/metrics/benchmarks_baseline_7b.json
     deps:
       - memorization_kfac/evaluations/eval_benchmarks.py
-    params:
-      - model.name
     metrics:
       - memorization_kfac/metrics/benchmarks_baseline_7b.json:
           cache: false
@@ -619,8 +614,6 @@ stages:
       --output memorization_kfac/metrics/simplemath_baseline_7b.json
     deps:
       - memorization_kfac/evaluations/eval_simplemath.py
-    params:
-      - model.name
     metrics:
       - memorization_kfac/metrics/simplemath_baseline_7b.json:
           cache: false
@@ -693,8 +686,6 @@ stages:
       - memorization_kfac/data/compare_kfac_implementations.py
       - "memorization_kfac/data/kfac_factors/olmo2_${model.size}"
       - memorization_kfac/data/kfac_factors_bergson_converted
-    params:
-      - model.size
     metrics:
       - memorization_kfac/metrics/kfac_comparison_results.json:
           cache: false
