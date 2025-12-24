@@ -119,7 +119,7 @@ def collect_sequences(corpus: str, tokenizer, seq_len: int, nbytes: int) -> list
 
 
 def kfac_worker(
-    model, ds, processor, *, batches, target_modules, cfg
+    model, data, processor, *, batches, target_modules, cfg
 ):
     """Worker function for KFAC collection."""
     model.gradient_checkpointing_enable()
