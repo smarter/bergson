@@ -147,25 +147,24 @@ stages:
         --target_blocks 23 24 25
         --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
         --sample_labels
-        #--kfac-only
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
       - bergson/hessians/collector.py
       - bergson/hessians/sharded_computation.py
+      - bergson/hessians/ekfac_compute.py
     outs:
       - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
     desc: |
       Paper Section 3.2 (7B model): Collect K-FAC factors using BERGSON implementation.
 
       Same parameters as collect_kfac_paper_7b but using bergson's collector.
-      Used to validate bergson implementation matches original.
+      Computes covariances and eigendecomposition.
 
       Settings from paper:
       - Model: OLMo-2 7B
       - Layers: 23, 24, 25
       - Data: ~100MB (~20M tokens) from Dolmino/OLMo mixtures
       - Sequence length: 512
-      - --kfac-only: Use KFAC (no eigenvalue correction)
 
   convert_bergson_paper_7b:
     cmd: >-
@@ -219,24 +218,24 @@ stages:
         --layers_per_pass 1
         --target_blocks 13 14 15
         --save_dir memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
-        --kfac-only
+        --sample_labels
     deps:
       - memorization_kfac/data/collect_kfac_bergson.py
       - bergson/hessians/collector.py
       - bergson/hessians/sharded_computation.py
+      - bergson/hessians/ekfac_compute.py
     outs:
       - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
     desc: |
       Paper Table 5 (1B model): Collect K-FAC factors using BERGSON implementation.
 
       Same parameters as collect_kfac_paper_1b but using bergson's collector.
-      Used to validate bergson implementation matches original.
+      Computes covariances and eigendecomposition.
 
       Settings:
       - Model: OLMo-2 1B
       - Layers: 13, 14, 15 (late layers, equivalent to 7B's 23-25)
       - Data: ~100MB (~20M tokens) from Dolmino/OLMo mixtures
-      - --kfac-only: Use KFAC (no eigenvalue correction)
 
   convert_bergson_paper_1b:
     cmd: >-
@@ -400,12 +399,19 @@ stages:
           cache: false
 
   paper_table1_7b_bergson:
-    #CUDA_VISIBLE_DEVICES=0
     cmd: >-
-      MEM_KFAC_FACTORS_ROOT=memorization_kfac/data/kfac_factors_paper_bergson_converted MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson python memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}' --use-cache --refresh-cache --perplexity --results-dir memorization_kfac/metrics_bergson --results-tag table1_7b
+      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size 7b
+      --bergson-factors memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
+      --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      --use-cache --refresh-cache
+      --perplexity
+      --results-dir memorization_kfac/metrics_bergson
+      --results-tag table1_7b
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
-      - memorization_kfac/data/kfac_factors_paper_bergson_converted/olmo2_7b
+      - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
       - memorization_kfac/data/pile10k_None.txt
       - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
     outs:
@@ -414,6 +420,9 @@ stages:
     metrics:
       - memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl:
           cache: false
+    desc: |
+      Paper Table 1 (7B model) using bergson factors directly.
+      Uses --bergson-factors to load pre-computed eigenvectors, bypassing conversion.
 
 
   paper_table1_1b:
@@ -478,6 +487,32 @@ stages:
     metrics:
       - memorization_kfac/metrics_sample/kfac_eval_log_1b_table1_1b.jsonl:
           cache: false
+
+  paper_table1_1b_bergson:
+    cmd: >-
+      MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson_1b
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size 1b
+      --bergson-factors memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
+      --layers-json '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      --use-cache --refresh-cache
+      --perplexity
+      --results-dir memorization_kfac/metrics_bergson
+      --results-tag table1_1b
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
+      - memorization_kfac/data/pile10k_None.txt
+      - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+    outs:
+      - memorization_kfac/cache/kfac_weights_paper_bergson_1b:
+          cache: true
+    metrics:
+      - memorization_kfac/metrics_bergson/kfac_eval_log_1b_table1_1b.jsonl:
+          cache: false
+    desc: |
+      Paper Table 5 (1B model) using bergson factors directly.
+      Uses --bergson-factors to load pre-computed eigenvectors, bypassing conversion.
 
 
   # =============================================================================

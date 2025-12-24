@@ -21,6 +21,7 @@ from tqdm.auto import tqdm
 from bergson.data import IndexConfig
 from bergson.distributed import distributed_computing
 from bergson.hessians.ekfac_compute import EkfacComputer
+from bergson.hessians.compute_all import compute_all_factors
 
 
 def parse():
@@ -121,20 +122,11 @@ def kfac_worker(
     model, ds, processor, *, batches, target_modules, cfg
 ):
     """Worker function for KFAC collection."""
-
     model.gradient_checkpointing_enable()
     #model.enable_input_require_grads()
     #model.config.use_cache = False
 
-    ekfac = EkfacComputer(
-        model=model,
-        data=ds,
-        batches=batches,
-        target_modules=target_modules,
-        cfg=cfg,
-    )
-    ekfac.compute_covariance()
-
+    compute_all_factors(model, data, processor, batches=batches, target_modules=target_modules, cfg=cfg)
 
 def main():
     args = parse()
@@ -197,7 +189,9 @@ def main():
 
     metadata = {
         "target_modules": sorted(target_modules),
+        "blocks": sorted(args.target_blocks),
         "format": "bergson",
+        "has_eigendecomposition": True,
         "batch_size": args.batch_size,
         "seq_len": args.seq_len,
         "world_size": world_size,
@@ -206,7 +200,7 @@ def main():
     with open(args.save_dir / "metadata.json", "w") as f:
         json.dump(metadata, indent=2, fp=f)
 
-    print(f"Saved {method} factors for blocks {args.target_blocks}")
+    print(f"Saved KFAC factors for blocks {args.target_blocks}")
 
 
 if __name__ == "__main__":

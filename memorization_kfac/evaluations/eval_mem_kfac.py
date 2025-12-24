@@ -16,9 +16,10 @@ import sys
 import time
 import argparse
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional
 
 import torch
+from safetensors import safe_open
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers.utils import logging as hf_logging
 from torch.utils.data import DataLoader
@@ -154,29 +155,164 @@ def _build_ptcache_perplexity_loader(tokenizer, clean_pt_path: str, block_size: 
     return DataLoader(perp_tensor, batch_size=96, shuffle=False)
 
 
+# ─────────────────────────────────────────────────────────────────
+# Bergson format support
+# ─────────────────────────────────────────────────────────────────
+
+def _load_bergson_sharded(path: Path) -> Dict[str, torch.Tensor]:
+    """Load sharded safetensors from bergson format, concatenating shards."""
+    shard_files = sorted(path.glob("shard_*.safetensors"))
+    if not shard_files:
+        raise FileNotFoundError(f"No shards found in {path}")
+
+    if len(shard_files) == 1:
+        with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+            return {key: f.get_tensor(key) for key in f.keys()}
+
+    # Multiple shards - concatenate along dim=0 (rows)
+    with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+        keys = list(f.keys())
+
+    result = {}
+    for key in keys:
+        shards = []
+        for shard_file in shard_files:
+            with safe_open(shard_file, framework="pt", device="cpu") as f:
+                shards.append(f.get_tensor(key))
+        result[key] = torch.cat(shards, dim=0)
+    return result
+
+
+def load_bergson_kfac_info(
+    bergson_path: str,
+    layer_names: List[str],
+    model,
+    device: Optional[str] = None,
+    keep_on_cpu: bool = False,
+) -> Dict[str, Dict]:
+    """
+    Load K-FAC info from bergson format with pre-computed eigenvectors.
+
+    This avoids the need for convert_bergson_to_original.py by directly loading
+    the eigenvectors and computing eigenvalues from the covariance matrices.
+
+    Args:
+        bergson_path: Path to bergson output directory (containing influence_results/)
+        layer_names: List of layer names (e.g., ['model.layers.31.mlp.up_proj'])
+        model: The PyTorch model (used to get original weights)
+        device: Device to use for computations
+        keep_on_cpu: If True, keep eigenvectors on CPU
+
+    Returns:
+        Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G}
+    """
+    bergson_path = Path(bergson_path)
+    influence_path = bergson_path / "influence_results"
+    device = device or next(model.parameters()).device
+
+    # Load eigenvectors
+    act_eigen = _load_bergson_sharded(influence_path / "activation_eigen_sharded")
+    grad_eigen = _load_bergson_sharded(influence_path / "gradient_eigen_sharded")
+
+    # Load covariances to compute eigenvalues
+    act_cov = _load_bergson_sharded(influence_path / "activation_covariance_sharded")
+    grad_cov = _load_bergson_sharded(influence_path / "gradient_covariance_sharded")
+
+    # Load total_processed for normalization
+    total_processed_path = influence_path / "total_processed_covariances.pt"
+    total_processed = torch.load(total_processed_path, map_location="cpu").item()
+
+    kfac_info = {}
+    for layer_name in layer_names:
+        # Convert layer_name to bergson key format
+        # model.layers.14.mlp.gate_proj -> layers.14.mlp.gate_proj
+        bergson_key = layer_name.removeprefix("model.")
+
+        if bergson_key not in act_eigen:
+            raise ValueError(f"Eigenvectors not found for {bergson_key} in bergson factors")
+
+        # Get original weight
+        parts = layer_name.split('.')
+        layer = model
+        for part in parts:
+            layer = getattr(layer, part)
+        W_orig = layer.weight.data.detach().clone()
+
+        compute_device = "cpu" if keep_on_cpu else device
+
+        # Load eigenvectors (note: eigh returns ascending order, we need descending)
+        evc_A = act_eigen[bergson_key].float().to(compute_device)
+        evc_G = grad_eigen[bergson_key].float().to(compute_device)
+
+        # Normalize and symmetrize covariances
+        cov_A = act_cov[bergson_key].float().to(compute_device) / total_processed
+        cov_A = (cov_A + cov_A.T) / 2
+        cov_G = grad_cov[bergson_key].float().to(compute_device) / total_processed
+        cov_G = (cov_G + cov_G.T) / 2
+
+        # Compute eigenvalues: lambda_i = v_i^T @ C @ v_i
+        eva_A = (evc_A.T @ cov_A @ evc_A).diagonal()
+        eva_G = (evc_G.T @ cov_G @ evc_G).diagonal()
+
+        # Sort in descending order (bergson stores in ascending from eigh)
+        idx_A = eva_A.argsort(descending=True)
+        eva_A = eva_A[idx_A]
+        evc_A = evc_A[:, idx_A]
+
+        idx_G = eva_G.argsort(descending=True)
+        eva_G = eva_G[idx_G]
+        evc_G = evc_G[:, idx_G]
+
+        # Verify dimensions
+        out_features, in_features = W_orig.shape
+        assert evc_G.shape[0] == out_features, \
+            f"G eigenvectors shape {evc_G.shape} doesn't match output dim {out_features}"
+        assert evc_A.shape[0] == in_features, \
+            f"A eigenvectors shape {evc_A.shape} doesn't match input dim {in_features}"
+
+        print(f"{layer_name}: W{tuple(W_orig.shape)}, G{tuple(cov_G.shape)}, A{tuple(cov_A.shape)}")
+
+        kfac_info[layer_name] = {
+            'W_orig': W_orig,
+            'eva_A': eva_A,
+            'evc_A': evc_A,
+            'eva_G': eva_G,
+            'evc_G': evc_G,
+        }
+
+    return kfac_info
+
+
 def apply_kfac_to_layer(model,
                        layer_idx: int,
-                       model_size: str,
                        model_name: str,
                        variance_gate: float,
                        variance_up: float,
                        variance_down: float,
+                       model_size: Optional[str] = None,
+                       bergson_path: Optional[str] = None,
                        use_cache: bool = True,
-                       refresh_cache: bool = False,
-                       quiet: bool = True) -> None:
-    """Apply K-FAC to a single layer's MLP projections."""
-    factors_path = get_kfac_factors_path(model_size, layer_idx)
+                       refresh_cache: bool = False) -> None:
+    """Apply K-FAC to a single layer's MLP projections.
 
-    # Get layer references
+    Args:
+        model: The model to apply K-FAC to
+        layer_idx: Layer index
+        model_name: Model name (for cache key)
+        variance_gate/up/down: Variance ratios for each projection
+        model_size: Model size for looking up pre-converted factors (mutually exclusive with bergson_path)
+        bergson_path: Path to bergson output directory (mutually exclusive with model_size)
+        use_cache: Whether to use cached weights
+        refresh_cache: Whether to recompute cached weights
+    """
+    if bergson_path is None and model_size is None:
+        raise ValueError("Either model_size or bergson_path must be provided")
+
     layer = model.model.layers[layer_idx]
-    up_layer = layer.mlp.up_proj
-    down_layer = layer.mlp.down_proj
-    gate_layer = layer.mlp.gate_proj
-
     projections = [
-        ("up", up_layer, variance_up),
-        ("down", down_layer, variance_down),
-        ("gate", gate_layer, variance_gate),
+        ("up", layer.mlp.up_proj, variance_up),
+        ("down", layer.mlp.down_proj, variance_down),
+        ("gate", layer.mlp.gate_proj, variance_gate),
     ]
 
     for proj_name, proj_layer, variance in projections:
@@ -184,29 +320,45 @@ def apply_kfac_to_layer(model,
             print(f"  K-FAC {proj_name}_proj (ρ={variance:.3f}): skipping (ρ≈1.0)")
             continue
 
-        # Check cache
-        if use_cache and not refresh_cache:
-            cache_path = CACHE_DIR / (
-                f"{_sanitize_filename_component(model_name)}__L{layer_idx}__{proj_name}"
-                f"__rho{_rho_to_str(variance)}__{proj_layer.weight.dtype.__str__()}.pt"
-            )
-            if cache_path.exists():
-                with torch.no_grad():
-                    cached = torch.load(cache_path, map_location=proj_layer.weight.device)
-                    proj_layer.weight.copy_(cached.to(dtype=proj_layer.weight.dtype, device=proj_layer.weight.device))
-                print(f"  K-FAC {proj_name}_proj (ρ={variance:.3f}): loaded from cache")
-                continue
-
-        # Apply K-FAC
-        layer_name = f'model.layers.{layer_idx}.mlp.{proj_name}_proj'
-        kfac = KFACTreatmentPairwise(
-            model,
-            layer_names=[layer_name],
-            kfac_factors_path=factors_path,
-            device=proj_layer.weight.device,
+        cache_path = CACHE_DIR / (
+            f"{_sanitize_filename_component(model_name)}__L{layer_idx}__{proj_name}"
+            f"__rho{_rho_to_str(variance)}__{proj_layer.weight.dtype.__str__()}.pt"
         )
+
+        # Check cache
+        if use_cache and not refresh_cache and cache_path.exists():
+            with torch.no_grad():
+                cached = torch.load(cache_path, map_location=proj_layer.weight.device)
+                proj_layer.weight.copy_(cached.to(dtype=proj_layer.weight.dtype, device=proj_layer.weight.device))
+            print(f"  K-FAC {proj_name}_proj (ρ={variance:.3f}): loaded from cache")
+            continue
+
+        # Build KFACTreatmentPairwise with appropriate factors
+        layer_name = f'model.layers.{layer_idx}.mlp.{proj_name}_proj'
+        if bergson_path:
+            kfac_info = load_bergson_kfac_info(
+                bergson_path=bergson_path,
+                layer_names=[layer_name],
+                model=model,
+                device=proj_layer.weight.device,
+            )
+            kfac = KFACTreatmentPairwise(
+                model,
+                layer_names=[layer_name],
+                kfac_info=kfac_info,
+                device=proj_layer.weight.device,
+            )
+        else:
+            factors_path = get_kfac_factors_path(model_size, layer_idx)
+            kfac = KFACTreatmentPairwise(
+                model,
+                layer_names=[layer_name],
+                kfac_factors_path=factors_path,
+                device=proj_layer.weight.device,
+            )
+
         kfac.apply_kfac_by_product(variance_ratio=variance)
-        # Report how many eigenvectors from G and A were retained
+
         stats = kfac.compression_stats.get(layer_name, None)
         if stats is not None:
             rG = stats.get('uniq_G', 0)
@@ -220,10 +372,6 @@ def apply_kfac_to_layer(model,
 
         if use_cache:
             os.makedirs(CACHE_DIR, exist_ok=True)
-            cache_path = CACHE_DIR / (
-                f"{_sanitize_filename_component(model_name)}__L{layer_idx}__{proj_name}"
-                f"__rho{_rho_to_str(variance)}__{proj_layer.weight.dtype.__str__()}.pt"
-            )
             torch.save(proj_layer.weight.detach().cpu(), cache_path)
 
 
@@ -247,6 +395,10 @@ def main():
                        help="Use cached K-FAC weights if available")
     parser.add_argument("--refresh-cache", action="store_true",
                        help="Recompute and overwrite cached weights")
+    parser.add_argument("--bergson-factors", type=str, default="",
+                       help="Path to bergson output directory. If set, reads factors directly from "
+                            "bergson format (with pre-computed eigenvectors) instead of using "
+                            "pre-converted .pt files.")
 
     # Evaluation settings
     parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
@@ -358,6 +510,8 @@ def main():
     if layer_order:
         print("\n" + "="*60)
         print(f"APPLYING K-FAC TO LAYERS: {layer_order}")
+        if args.bergson_factors:
+            print(f"Using bergson factors from: {args.bergson_factors}")
         print("="*60)
 
         for layer_idx in layer_order:
@@ -366,14 +520,16 @@ def main():
 
             variances = layer_to_variances[layer_idx]
             print(f"\nLayer {layer_idx}:")
+
             apply_kfac_to_layer(
                 model,
                 layer_idx,
-                args.model_size,
-                model_name,
+                model_name=model_name,
                 variance_gate=variances["gate"],
                 variance_up=variances["up"],
                 variance_down=variances["down"],
+                model_size=args.model_size if not args.bergson_factors else None,
+                bergson_path=args.bergson_factors or None,
                 use_cache=args.use_cache,
                 refresh_cache=args.refresh_cache,
             )

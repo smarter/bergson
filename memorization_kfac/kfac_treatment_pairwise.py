@@ -18,45 +18,52 @@ from typing import Dict, List, Optional, Union, Tuple
 class KFACTreatment:
     """
     Apply K-FAC compression to specified linear layers in a model.
-    
+
     This class uses K-FAC factors (activation and gradient covariances) to project
     weights onto top eigenspaces for memorization reduction.
-    
+
     Note on dimensions:
     - For gate/up projections: W has shape [11008, 4096] = [out_features, in_features]
     - For down projection: W has shape [4096, 11008] = [out_features, in_features]
     - G always corresponds to output dimension (gradient covariance)
     - A always corresponds to input dimension (activation covariance)
     """
-    
-    def __init__(self, model, layer_names: List[str], kfac_factors_path: str, 
-                 device: Optional[str] = None, keep_eigenvectors_on_cpu: bool = False):
+
+    def __init__(self, model, layer_names: List[str], kfac_factors_path: Optional[str] = None,
+                 device: Optional[str] = None, keep_eigenvectors_on_cpu: bool = False,
+                 kfac_info: Optional[Dict[str, Dict]] = None):
         """
         Initialize K-FAC treatment.
-        
+
         Args:
             model: The PyTorch model to apply treatment to
             layer_names: List of layer names to compress (e.g., ['model.layers.31.mlp.up_proj'])
-            kfac_factors_path: Path to the saved K-FAC factors file
+            kfac_factors_path: Path to the saved K-FAC factors file (optional if kfac_info provided)
             device: Device to use for computations (defaults to model device)
             keep_eigenvectors_on_cpu: If True, store eigenvectors on CPU to save GPU memory
+            kfac_info: Pre-computed K-FAC info dict. If provided, skips loading from file.
+                       Each entry should have keys: W_orig, eva_A, evc_A, eva_G, evc_G
         """
         self.model = model
         self.layer_names = layer_names
         self.device = device or next(model.parameters()).device
         self.keep_eigenvectors_on_cpu = keep_eigenvectors_on_cpu
-        
-        # Load K-FAC factors
-        self.kfac_data = torch.load(kfac_factors_path, map_location='cpu')
-        
+
         # Store original weights
         self.original_weights = {}
         self._store_original_weights()
-        
-        # Prepare K-FAC info for each layer
-        self.kfac_info = {}
-        self._prepare_kfac_info()
-        
+
+        # Use pre-computed kfac_info or load from file
+        if kfac_info is not None:
+            self.kfac_data = None
+            self.kfac_info = kfac_info
+        elif kfac_factors_path is not None:
+            self.kfac_data = torch.load(kfac_factors_path, map_location='cpu')
+            self.kfac_info = {}
+            self._prepare_kfac_info()
+        else:
+            raise ValueError("Either kfac_factors_path or kfac_info must be provided")
+
         # Track compression stats
         self.compression_stats = {}
         
