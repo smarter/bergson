@@ -19,6 +19,10 @@ from datasets import (
     load_dataset,
 )
 from peft import PeftConfig, PeftModel, get_peft_model_state_dict
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    apply_activation_checkpointing,
+    checkpoint_wrapper,
+)
 from torch.distributed.elastic.multiprocessing import DefaultLogsSpecs, start_processes
 from torch.distributed.fsdp import fully_shard
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -158,13 +162,24 @@ def setup_model_and_peft(
 
     # Configure gradients
     model.requires_grad_(False)
-    model.get_input_embeddings().requires_grad_(True)  # type: ignore
+    model.enable_input_require_grads()
+
+    layer_list = get_layer_list(model)
 
     # Apply FSDP if needed
     if cfg.fsdp:
-        for layer in get_layer_list(model):
+        for layer in layer_list:
             fully_shard(layer)
         fully_shard(model)
+
+    # Apply activation checkpointing to all layers
+    model.config.use_cache = False  # see https://github.com/huggingface/transformers/issues/34928#issuecomment-2501970174
+    layer_class = type(layer_list[0])
+    apply_activation_checkpointing(
+        model,
+        checkpoint_wrapper_fn=checkpoint_wrapper,
+        check_fn=lambda m: isinstance(m, layer_class),
+    )
 
     return model, target_modules  # type: ignore
 
