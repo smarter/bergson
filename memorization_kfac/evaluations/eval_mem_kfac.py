@@ -189,6 +189,7 @@ def load_bergson_kfac_info(
     model,
     device: Optional[str] = None,
     keep_on_cpu: bool = False,
+    use_eigenvalue_corrections: bool = False,
 ) -> Dict[str, Dict]:
     """
     Load K-FAC info from bergson format with pre-computed eigenvectors.
@@ -202,9 +203,10 @@ def load_bergson_kfac_info(
         model: The PyTorch model (used to get original weights)
         device: Device to use for computations
         keep_on_cpu: If True, keep eigenvectors on CPU
+        use_eigenvalue_corrections: If True, load pre-computed eigenvalue corrections
 
     Returns:
-        Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G}
+        Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G, lambda_correction (optional)}
     """
     bergson_path = Path(bergson_path)
     influence_path = bergson_path / "influence_results"
@@ -221,6 +223,14 @@ def load_bergson_kfac_info(
     # Load total_processed for normalization
     total_processed_path = influence_path / "total_processed_covariances.pt"
     total_processed = torch.load(total_processed_path, map_location="cpu").item()
+
+    # Optionally load eigenvalue corrections
+    lambda_corrections = None
+    if use_eigenvalue_corrections:
+        lambda_path = influence_path / "eigenvalue_correction_sharded"
+        if not lambda_path.exists():
+            raise FileNotFoundError(f"Eigenvalue corrections not found at {lambda_path}")
+        lambda_corrections = _load_bergson_sharded(lambda_path)
 
     kfac_info = {}
     for layer_name in layer_names:
@@ -272,13 +282,25 @@ def load_bergson_kfac_info(
 
         print(f"{layer_name}: W{tuple(W_orig.shape)}, G{tuple(cov_G.shape)}, A{tuple(cov_A.shape)}")
 
-        kfac_info[layer_name] = {
+        layer_info = {
             'W_orig': W_orig,
             'eva_A': eva_A,
             'evc_A': evc_A,
             'eva_G': eva_G,
             'evc_G': evc_G,
         }
+
+        if lambda_corrections is not None and bergson_key in lambda_corrections:
+            # Eigenvalue corrections are stored in bergson's original order (ascending from eigh)
+            # We need to reorder to match our descending eigenvector order
+            lambda_corr = lambda_corrections[bergson_key].float().to(compute_device)
+            # Reorder: lambda_corr[old_i, old_j] -> lambda_corr_new[new_i, new_j]
+            # where new indices come from sorting eigenvalues descending
+            lambda_corr = lambda_corr[idx_G][:, idx_A]
+            layer_info['lambda_correction'] = lambda_corr
+            print(f"  Loaded eigenvalue corrections: {tuple(layer_info['lambda_correction'].shape)}")
+
+        kfac_info[layer_name] = layer_info
 
     return kfac_info
 
@@ -292,7 +314,8 @@ def apply_kfac_to_layer(model,
                        model_size: Optional[str] = None,
                        bergson_path: Optional[str] = None,
                        use_cache: bool = True,
-                       refresh_cache: bool = False) -> None:
+                       refresh_cache: bool = False,
+                       use_eigenvalue_corrections: bool = False) -> None:
     """Apply K-FAC to a single layer's MLP projections.
 
     Args:
@@ -304,6 +327,7 @@ def apply_kfac_to_layer(model,
         bergson_path: Path to bergson output directory (mutually exclusive with model_size)
         use_cache: Whether to use cached weights
         refresh_cache: Whether to recompute cached weights
+        use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
     """
     if bergson_path is None and model_size is None:
         raise ValueError("Either model_size or bergson_path must be provided")
@@ -341,6 +365,7 @@ def apply_kfac_to_layer(model,
                 layer_names=[layer_name],
                 model=model,
                 device=proj_layer.weight.device,
+                use_eigenvalue_corrections=use_eigenvalue_corrections,
             )
             kfac = KFACTreatmentPairwise(
                 model,
@@ -399,6 +424,9 @@ def main():
                        help="Path to bergson output directory. If set, reads factors directly from "
                             "bergson format (with pre-computed eigenvectors) instead of using "
                             "pre-converted .pt files.")
+    parser.add_argument("--eigenvalue-corrections", action="store_true",
+                       help="Use pre-computed eigenvalue corrections from bergson format. "
+                            "Only supported with --bergson-factors.")
 
     # Evaluation settings
     parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
@@ -418,6 +446,10 @@ def main():
     parser.add_argument("--results-tag", type=str, default="", help="Filename tag appended to results logs")
 
     args = parser.parse_args()
+
+    # Validate argument combinations
+    if args.eigenvalue_corrections and not args.bergson_factors:
+        parser.error("--eigenvalue-corrections requires --bergson-factors")
 
     # Suppress HF logging
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -532,6 +564,7 @@ def main():
                 bergson_path=args.bergson_factors or None,
                 use_cache=args.use_cache,
                 refresh_cache=args.refresh_cache,
+                use_eigenvalue_corrections=args.eigenvalue_corrections,
             )
 
     # POST-K-FAC EVALUATION

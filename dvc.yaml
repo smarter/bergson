@@ -348,6 +348,7 @@ stages:
       --perplexity
       --results-dir memorization_kfac/metrics_bergson
       --results-tag table1_7b
+      ${kfac_edit.eigenvalue_corrections}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
@@ -410,6 +411,7 @@ stages:
       --perplexity
       --results-dir memorization_kfac/metrics_bergson
       --results-tag table1_1b
+      ${kfac_edit.eigenvalue_corrections}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - memorization_kfac/data/kfac_factors_paper_bergson/olmo2_1b
