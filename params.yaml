@@ -38,3 +38,4 @@ kfac_edit:
   # Higher values = less compression, more memorization retained
   # Lower values = more compression, less memorization
   layers_json: '{}'  # e.g., '{"31": {"gate": 0.8, "up": 0.8, "down": 0.8}}'
+  eigenvalue_corrections: ""  # Set to "--eigenvalue-corrections" to use EK-FAC pair selection

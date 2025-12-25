@@ -399,6 +399,38 @@ class KFACTreatmentPairwise(KFACTreatment):
 
         return selected
 
+    @staticmethod
+    def _top_pairs_by_correction(lambda_correction: torch.Tensor,
+                                  ratio: float) -> List[Tuple[int, int]]:
+        """
+        Select top pairs using the eigenvalue correction matrix.
+
+        Unlike _top_pairs_by_product which exploits the separable structure of
+        λ_i * μ_j, this method handles the full correction matrix by sorting
+        all entries and selecting until cumulative mass >= ratio * total.
+        """
+        m, n = lambda_correction.shape
+        flat = lambda_correction.flatten()
+        total_mass = flat.sum().item()
+        target_mass = ratio * total_mass
+
+        # Sort in descending order
+        sorted_vals, sorted_indices = torch.sort(flat, descending=True)
+
+        # Select pairs until we reach target mass
+        cum_mass = 0.0
+        selected = []
+        for idx in range(len(sorted_indices)):
+            val = sorted_vals[idx].item()
+            flat_idx = sorted_indices[idx].item()
+            i, j = flat_idx // n, flat_idx % n
+            cum_mass += val
+            selected.append((i, j))
+            if cum_mass >= target_mass:
+                break
+
+        return selected
+
     def _project_weight_pairs(self,
                               info: Dict,
                               pairs: List[Tuple[int, int]]) -> torch.Tensor:
@@ -518,7 +550,14 @@ class KFACTreatmentPairwise(KFACTreatment):
                 assert (eva_A[:-1] >= eva_A[1:]).all(), "eva_A must be sorted desc"
 
                 # Step 1: which (i,j) pairs?
-                pairs = self._top_pairs_by_product(eva_G, eva_A, rho)
+                if 'lambda_correction' in info:
+                    # Use eigenvalue corrections (EK-FAC)
+                    lambda_corr = info['lambda_correction'].to(self.device)
+                    pairs = self._top_pairs_by_correction(lambda_corr, rho)
+                    print(f"  Using eigenvalue corrections for pair selection")
+                else:
+                    # Use product of eigenvalues (standard K-FAC)
+                    pairs = self._top_pairs_by_product(eva_G, eva_A, rho)
 
                 # Step 2: build projection
                 W_proj = self._project_weight_pairs(info, pairs)
