@@ -409,7 +409,7 @@ class KFACTreatmentPairwise(KFACTreatment):
         λ_i * μ_j, this method handles the full correction matrix by sorting
         all entries and selecting until cumulative mass >= ratio * total.
         """
-        m, n = lambda_correction.shape
+        n = lambda_correction.shape[1]
         flat = lambda_correction.flatten()
         total_mass = flat.sum().item()
         target_mass = ratio * total_mass
@@ -417,19 +417,16 @@ class KFACTreatmentPairwise(KFACTreatment):
         # Sort in descending order
         sorted_vals, sorted_indices = torch.sort(flat, descending=True)
 
-        # Select pairs until we reach target mass
-        cum_mass = 0.0
-        selected = []
-        for idx in range(len(sorted_indices)):
-            val = sorted_vals[idx].item()
-            flat_idx = sorted_indices[idx].item()
-            i, j = flat_idx // n, flat_idx % n
-            cum_mass += val
-            selected.append((i, j))
-            if cum_mass >= target_mass:
-                break
+        # Find cutoff using cumsum + binary search
+        cumsum = torch.cumsum(sorted_vals, dim=0)
+        k = min(torch.searchsorted(cumsum, target_mass).item() + 1, len(sorted_indices))
 
-        return selected
+        # Convert flat indices to (i, j) pairs (vectorized)
+        selected_flat = sorted_indices[:k]
+        rows = (selected_flat // n).tolist()
+        cols = (selected_flat % n).tolist()
+
+        return list(zip(rows, cols))
 
     def _project_weight_pairs(self,
                               info: Dict,
