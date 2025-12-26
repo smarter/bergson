@@ -1,0 +1,101 @@
+schema: '2.0'
+stages:
+  prepare_pile10k:
+    cmd:
+    - python memorization_kfac/data/prepare_pile10k.py
+    deps:
+    - path: memorization_kfac/data/prepare_pile10k.py
+      hash: md5
+      md5: 1c7879abbc08baaadbd11268b83994ae
+      size: 1224
+    outs:
+    - path: memorization_kfac/data/pile10k_None.txt
+      hash: md5
+      md5: 1574c0e28ff0313dc8ee4b2342c6943a
+      size: 61084719
+  prepare_pile10k_cache:
+    cmd:
+    - python memorization_kfac/data/prepare_pile10k_cache.py
+    deps:
+    - path: memorization_kfac/data/pile10k_None.txt
+      hash: md5
+      md5: 1574c0e28ff0313dc8ee4b2342c6943a
+      size: 61084719
+    - path: memorization_kfac/data/prepare_pile10k_cache.py
+      hash: md5
+      md5: d360347c7c4922fd491a9df2d6151ddc
+      size: 2286
+    outs:
+    - path: 
+        memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+      hash: md5
+      md5: b6d0b09d8146690df2506cb205c4ec9d
+      size: 118745952
+  collect_kfac_paper_7b_bergson:
+    cmd:
+    - python memorization_kfac/data/collect_kfac_bergson.py --model 
+      allenai/OLMo-2-1124-7B --device cuda --dtype float32 --corpus dolmo 
+      --nbytes 100000000 --seq_len 512 --batch_size 3 --layers_per_pass 1 
+      --target_blocks 23 24 25 --save_dir 
+      memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b --sample_labels
+      --fsdp --world_size 8
+    deps:
+    - path: bergson/hessians/collector.py
+      hash: md5
+      md5: c9dd86822d3fb54a48c54b1b208e5889
+      size: 13015
+    - path: bergson/hessians/ekfac_compute.py
+      hash: md5
+      md5: e422037e242fbcd25e9446d86dcc5a65
+      size: 22143
+    - path: bergson/hessians/sharded_computation.py
+      hash: md5
+      md5: 5b99ad2b95ef61ce034fe092f7f2f04e
+      size: 10093
+    - path: memorization_kfac/data/collect_kfac_bergson.py
+      hash: md5
+      md5: 23cca7ace5341d6b9bf13cd27d686f18
+      size: 6838
+    outs:
+    - path: memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
+      hash: md5
+      md5: b12869d17ffe4ebcc6a54d5d849ddbee.dir
+      size: 11555871739
+      nfiles: 45
+  paper_table1_7b_bergson:
+    cmd: "MEM_KFAC_CACHE_DIR=memorization_kfac/cache/kfac_weights_paper_bergson python
+      memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --bergson-factors
+      memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b --layers-json '{\"\
+      23\": {\"gate\": 0.40, \"up\": 0.40, \"down\": 1.0}, \"24\": {\"gate\": 0.40,
+      \"up\": 0.40, \"down\": 1.0}, \"25\": {\"gate\": 0.40, \"up\": 0.40, \"down\"\
+      : 1.0}}' --use-cache --refresh-cache --perplexity --skip-baseline --bs 96 --results-dir
+      memorization_kfac/metrics_bergson --results-tag table1_7b --eigenvalue-corrections"
+    deps:
+    - path: memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
+      hash: md5
+      md5: b12869d17ffe4ebcc6a54d5d849ddbee.dir
+      size: 11555871739
+      nfiles: 45
+    - path: memorization_kfac/data/pile10k_None.txt
+      hash: md5
+      md5: 1574c0e28ff0313dc8ee4b2342c6943a
+      size: 61084719
+    - path: 
+        memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+      hash: md5
+      md5: b6d0b09d8146690df2506cb205c4ec9d
+      size: 118745952
+    - path: memorization_kfac/evaluations/eval_mem_kfac.py
+      hash: md5
+      md5: 6f2fcf0fa6ad98e8ca69e7646a70cc15
+      size: 30056
+    outs:
+    - path: memorization_kfac/cache/kfac_weights_paper_bergson
+      hash: md5
+      md5: d230cb2a6d4d82c32b5257c54a782ade.dir
+      size: 541078164
+      nfiles: 6
+    - path: memorization_kfac/metrics_bergson/kfac_eval_log_7b_table1_7b.jsonl
+      hash: md5
+      md5: 5a25d4c8b765cfae5c142ccbb2b2983f
+      size: 1424
