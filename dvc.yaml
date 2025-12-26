@@ -343,7 +343,7 @@ stages:
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size 7b
       --bergson-factors memorization_kfac/data/kfac_factors_paper_bergson/olmo2_7b
-      --layers-json '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      --layers-json '{"23": {"gate": 0.40, "up": 0.40, "down": 1.0}, "24": {"gate": 0.40, "up": 0.40, "down": 1.0}, "25": {"gate": 0.40, "up": 0.40, "down": 1.0}}'
       --use-cache --refresh-cache
       --perplexity
       --bs ${kfac_edit.batch_size}
