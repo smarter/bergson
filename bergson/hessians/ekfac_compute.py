@@ -64,7 +64,6 @@ class EkfacComputer:
         self.model = model
 
         self.device = model.device
-        self.dtype = model.dtype
         self.target_info = HookCollectorBase.discover_targets(model.base_model, target_modules)  # type: ignore
 
         self.target_modules = target_modules  # which modules to compute EKFAC for, by default uses all MLPs
@@ -94,7 +93,6 @@ class EkfacComputer:
         cov_collector = CovarianceCollector(
             self.model.base_model,
             target_modules=self.target_modules,
-            dtype=self.dtype,
             shard_computer=self.shard_computer,
             rank=self.rank,
             path=self.path,
@@ -158,7 +156,7 @@ class EkfacComputer:
         covariance_eigenvectors = self.shard_computer._merge_and_shard_dict(
             input_dict=covariance_eigenvectors,
             covariance_type=covariance_type,
-            dtype=self.dtype,
+            dtype=torch.float32,  # Keep eigenvectors in float32
         )
 
         eigen_path = os.path.join(self.path, f"{covariance_type}_eigen_sharded")
@@ -309,20 +307,6 @@ class EkfacApplicator:
         self.sharded_computer = ShardedMul(
             target_info=None, lambda_damp_factor=cfg.lambda_damp_factor
         )
-
-        match cfg.precision:
-            case "bf16":
-                self.dtype = torch.bfloat16
-            case "fp16":
-                self.dtype = torch.float16
-            case "fp32":
-                self.dtype = torch.float32
-            case "int4" | "int8":
-                self.dtype = (
-                    torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-                )
-            case other:
-                raise ValueError(f"Unsupported precision: {other}")
 
     def prepare_attribution(self):
         self.logger.info("Preparing EKFAC factors for attribution...")

@@ -208,7 +208,6 @@ class CovarianceCollector(HookCollectorBase):
     """
 
     shard_computer: ShardedMul
-    dtype: torch.dtype
     rank: int
     path: str
 
@@ -222,7 +221,6 @@ class CovarianceCollector(HookCollectorBase):
         self.shard_computer._init_covariance_dict(
             activation_covariance_dict=self.A_cov_dict,
             gradient_covariance_dict=self.S_cov_dict,
-            dtype=self.dtype,
         )
 
     def forward_hook(self, name: str, a: Tensor) -> None:

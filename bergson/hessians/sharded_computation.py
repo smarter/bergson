@@ -28,7 +28,6 @@ class ShardedMul:
         self,
         activation_covariance_dict: dict,
         gradient_covariance_dict: dict,
-        dtype: torch.dtype,
     ):
         """This function initializes the covariance matrices for activations and gradients."""
 
