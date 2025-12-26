@@ -411,14 +411,17 @@ class KFACTreatmentPairwise(KFACTreatment):
         """
         n = lambda_correction.shape[1]
         flat = lambda_correction.flatten()
-        total_mass = flat.sum().item()
-        target_mass = ratio * total_mass
 
         # Sort in descending order
         sorted_vals, sorted_indices = torch.sort(flat, descending=True)
 
+        # Use float64 for cumsum to avoid precision loss with millions of elements
+        sorted_vals_f64 = sorted_vals.double()
+        total_mass = sorted_vals_f64.sum().item()
+        target_mass = ratio * total_mass
+
         # Find cutoff using cumsum + binary search
-        cumsum = torch.cumsum(sorted_vals, dim=0)
+        cumsum = torch.cumsum(sorted_vals_f64, dim=0)
         k = min(torch.searchsorted(cumsum, target_mass).item() + 1, len(sorted_indices))
 
         # Convert flat indices to (i, j) pairs (vectorized)
