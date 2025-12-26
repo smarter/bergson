@@ -346,6 +346,7 @@ stages:
       --layers-json '{"23": {"gate": 0.40, "up": 0.40, "down": 1.0}, "24": {"gate": 0.40, "up": 0.40, "down": 1.0}, "25": {"gate": 0.40, "up": 0.40, "down": 1.0}}'
       --use-cache --refresh-cache
       --perplexity
+      --skip-baseline
       --bs ${kfac_edit.batch_size}
       --results-dir memorization_kfac/metrics_bergson
       --results-tag table1_7b
