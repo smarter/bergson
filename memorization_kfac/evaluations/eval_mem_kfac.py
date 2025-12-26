@@ -226,11 +226,18 @@ def load_bergson_kfac_info(
 
     # Optionally load eigenvalue corrections
     lambda_corrections = None
+    total_processed_lambda = None
     if use_eigenvalue_corrections:
         lambda_path = influence_path / "eigenvalue_correction_sharded"
         if not lambda_path.exists():
             raise FileNotFoundError(f"Eigenvalue corrections not found at {lambda_path}")
         lambda_corrections = _load_bergson_sharded(lambda_path)
+        # Load normalization constant for eigenvalue corrections
+        lambda_total_path = influence_path / "total_processed_lambda_correction.pt"
+        if not lambda_total_path.exists():
+            raise FileNotFoundError(f"Eigenvalue corrections total processed not found at {lambda_total_path}")
+        total_processed_lambda = torch.load(lambda_total_path, map_location="cpu").item()
+        assert total_processed == total_processed_lambda, "Inconsistency: {total_processed} != {total_processed_lambda}"
 
     kfac_info = {}
     for layer_name in layer_names:
@@ -294,6 +301,8 @@ def load_bergson_kfac_info(
             # Eigenvalue corrections are stored in bergson's original order (ascending from eigh)
             # We need to reorder to match our descending eigenvector order
             lambda_corr = lambda_corrections[bergson_key].float().to(compute_device)
+            # Normalize by total processed
+            lambda_corr = lambda_corr / total_processed
             # Reorder: lambda_corr[old_i, old_j] -> lambda_corr_new[new_i, new_j]
             # where new indices come from sorting eigenvalues descending
             lambda_corr = lambda_corr[idx_G][:, idx_A]
