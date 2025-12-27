@@ -50,9 +50,9 @@ stages:
       --layers_per_pass ${collect_kfac.layers_per_pass}
       --target_blocks ${model.target_blocks}
       --save_dir ${method.factors_dir}/olmo2_${model.size}
-      ${collect_kfac.sample_labels}
-      ${fsdp}
-      ${world_size}
+      ${computed.sample_labels_flag}
+      ${computed.fsdp_flag}
+      ${computed.world_size_flag}
     deps:
       - ${method.collect_script}
     outs:
@@ -88,8 +88,8 @@ stages:
       --bs ${kfac_edit.batch_size}
       --results-dir ${method.metrics_dir}
       --results-tag ${model.size}
-      ${method.bergson_factors_flag} ${method.factors_dir}/olmo2_${model.size}
-      ${method.eigenvalue_corrections_flag}
+      ${computed.bergson_factors_arg}
+      ${computed.eigenvalue_corrections_flag}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - ${method.factors_dir}/olmo2_${model.size}

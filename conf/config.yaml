@@ -16,15 +16,25 @@ collect_kfac:
   nbytes: 100000000  # ~100MB (~20M tokens)
   seq_len: 512
   layers_per_pass: 1
-  sample_labels: "--sample_labels"
+  sample_labels: true
 
 # Multi-GPU settings (bergson only)
-fsdp: ""  # Set to "--fsdp" to enable FSDP
-world_size: ""  # Set to "--world_size N" to specify GPU count
+fsdp: false
+world_size: null  # Set to number of GPUs
 
 # K-FAC Edit Parameters
 kfac_edit:
   batch_size: 96  # Batch size for evaluation
+
+# Computed command-line flags (using resolvers from hydra_plugins/resolvers.py)
+computed:
+  # Method flags
+  bergson_factors_arg: "${if:${method.use_bergson},'--bergson-factors ${method.factors_dir}/olmo2_${model.size}',''}"
+  eigenvalue_corrections_flag: "${if:${method.use_eigenvalue_corrections},'--eigenvalue-corrections',''}"
+  # Collection flags
+  sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
+  fsdp_flag: "${if:${fsdp},'--fsdp',''}"
+  world_size_flag: "${if_set:${world_size},'--world_size'}"
 
 # Benchmark Evaluation Parameters (using olmes)
 benchmark:

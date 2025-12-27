@@ -2,12 +2,10 @@
 # @package method
 name: "original"
 use_bergson: false
+use_eigenvalue_corrections: false
 # Collection script
 collect_script: "memorization_kfac/data/collect_kfac_multilayer.py"
 # Output directories
 factors_dir: "memorization_kfac/data/kfac_factors_paper"
 cache_dir: "memorization_kfac/cache/kfac_weights_paper"
 metrics_dir: "memorization_kfac/metrics"
-# Flags for eval_kfac (original doesn't use these)
-bergson_factors_flag: ""
-eigenvalue_corrections_flag: ""

@@ -2,12 +2,10 @@
 # @package method
 name: "bergson"
 use_bergson: true
+use_eigenvalue_corrections: true
 # Collection script
 collect_script: "memorization_kfac/data/collect_kfac_bergson.py"
 # Output directories
 factors_dir: "memorization_kfac/data/kfac_factors_paper_bergson"
 cache_dir: "memorization_kfac/cache/kfac_weights_paper_bergson"
 metrics_dir: "memorization_kfac/metrics_bergson"
-# Flags for eval_kfac (bergson-specific)
-bergson_factors_flag: "--bergson-factors"
-eigenvalue_corrections_flag: "--eigenvalue-corrections"
