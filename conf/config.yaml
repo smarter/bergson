@@ -9,15 +9,10 @@ defaults:
   - benchmark: gsm8k
   - _self_
 
-# Common output suffix and directories
-out_suffix: "${method.name}/${model.size}"
-out_dir:
-  collect_kfac: "out/collect_kfac/${out_suffix}"
-  eval_kfac: "out/eval_kfac/${out_suffix}"
-  plot_figure2: "out/plot_figure2/${out_suffix}"
-  benchmark: "out/benchmark/${out_suffix}"
 
-# Shared collection parameters
+fsdp: false
+world_size: null  # Set to number of GPUs
+
 collect_kfac:
   sample_labels: true
   args:
@@ -27,16 +22,38 @@ collect_kfac:
     nbytes: 100000000  # ~100MB (~20M tokens)
     seq_len: 512
 
-# Multi-GPU settings (bergson only)
-fsdp: false
-world_size: null  # Set to number of GPUs
-
-# K-FAC Edit Parameters
 eval_kfac:
+  # Keep the layers referenced here in sync with model.args_collect_kfac.target_blocks
+  _layers-json:
+    "7b":
+      "goodfire":
+        # From the paper
+        '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      "bergson":
+        # Tuned to approximately match goodfire wrt to the numbers of preserved eigenvalues
+        '{"23": {"gate": 0.40, "up": 0.40, "down": 1.0}, "24": {"gate": 0.40, "up": 0.40, "down": 1.0}, "25": {"gate": 0.40, "up": 0.40, "down": 1.0}}'
+    "1b":
+      "goodfire":
+        # Not specified in the paper, doesn't work well as-is.
+        '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+      "bergson":
+        # Untuned
+        '{"13": {"gate": 0.40, "up": 0.40, "down": 1.0}, "14": {"gate": 0.40, "up": 0.40, "down": 1.0}, "15": {"gate": 0.40, "up": 0.40, "down": 1.0}}'
   args:
     bs: 96
-    model-size: "${model.size}"
-    results-tag: "${model.size}"
+    model-size: ${model.size}
+    results-tag: ${model.size}
+    layers-json: ${.._layers-json[${model.size}][${method.name}]}
+
+
+
+# Common output suffix and directories
+out_suffix: "${method.name}/${model.size}"
+out_dir:
+  collect_kfac: "out/collect_kfac/${out_suffix}"
+  eval_kfac: "out/eval_kfac/${out_suffix}"
+  plot_figure2: "out/plot_figure2/${out_suffix}"
+  benchmark: "out/benchmark/${out_suffix}"
 
 # Computed command-line flags (using resolvers from hydra_plugins/resolvers.py)
 computed:
@@ -44,4 +61,3 @@ computed:
   sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
   fsdp_flag: "${if:${fsdp},'--fsdp',''}"
   world_size_flag: "${if_set:${world_size},'--world_size'}"
-

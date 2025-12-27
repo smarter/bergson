@@ -1,15 +1,11 @@
-# OLMo-2 1B model configuration
 # @package model
 name: "allenai/OLMo-2-0425-1B"
 size: "1b"
 
-# Args for collect_kfac stage
 args_collect_kfac:
   batch_size: 32
-  target_blocks: "13 14 15"  # Late layers, equivalent to 7B's 23-25
+  target_blocks: "13 14 15"  # Keep in sync with eval_kfac._preserved_energy
 
-# Args for eval_kfac stage (60% energy in gate/up, 100% in down)
 args_eval_kfac:
-  layers-json: '{"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
   layers_per_pass: 3
 
