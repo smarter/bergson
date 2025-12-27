@@ -40,5 +40,3 @@ computed:
 # Benchmark Evaluation Parameters (shared settings)
 benchmark:
   model: "olmo-2-7b-1124"
-  output_dir: "memorization_kfac/benchmarks"
-  olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"

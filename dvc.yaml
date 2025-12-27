@@ -1,3 +1,7 @@
+vars:
+  - benchmark_output_dir: "memorization_kfac/benchmarks"
+  - olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"
+
 stages:
   # =============================================================================
   # Data Preparation
@@ -166,17 +170,17 @@ stages:
 
   benchmark:
     cmd: >-
-      uvx --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${benchmark.olmes_commit}"
+      uvx --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${olmes_commit}"
       olmes
       --model ${benchmark.model}
       --task ${benchmark.task}
       --batch-size ${benchmark.batch_size}
-      --output-dir ${benchmark.output_dir}/${benchmark.task}
-      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark.output_dir}/${benchmark.task}/metrics.json ${benchmark.output_dir}/${benchmark.task}.metrics.json
+      --output-dir ${benchmark_output_dir}/${benchmark.task}
+      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark_output_dir}/${benchmark.task}/metrics.json ${benchmark_output_dir}/${benchmark.task}.metrics.json
     outs:
-      - ${benchmark.output_dir}/${benchmark.task}
+      - ${benchmark_output_dir}/${benchmark.task}
     metrics:
-      - ${benchmark.output_dir}/${benchmark.task}.metrics.json
+      - ${benchmark_output_dir}/${benchmark.task}.metrics.json
     desc: |
       Run benchmark evaluation using OLMES with vLLM support.
 
