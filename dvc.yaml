@@ -173,12 +173,6 @@ stages:
       --batch-size ${benchmark.batch_size}
       --output-dir ${benchmark.output_dir}/${benchmark.task}
       && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark.output_dir}/${benchmark.task}/metrics.json ${benchmark.output_dir}/${benchmark.task}.metrics.json
-    params:
-      - benchmark.model
-      - benchmark.task
-      - benchmark.output_dir
-      - benchmark.olmes_commit
-      - benchmark.batch_size
     outs:
       - ${benchmark.output_dir}/${benchmark.task}
     metrics:
