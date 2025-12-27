@@ -627,16 +627,16 @@ stages:
       --model ${benchmark.model}
       --task ${benchmark.task}
       --output-dir ${benchmark.output_dir}/${benchmark.task}
+      && cp ${benchmark.output_dir}/${benchmark.task}/metrics.json ${benchmark.output_dir}/${benchmark.task}.metrics.json
     params:
       - benchmark.model
       - benchmark.task
       - benchmark.output_dir
       - benchmark.olmes_commit
     outs:
-      - ${benchmark.output_dir}/${benchmark.task}:
-          persist: true
+      - ${benchmark.output_dir}/${benchmark.task}
     metrics:
-      - ${benchmark.output_dir}/${benchmark.task}/metrics.json
+      - ${benchmark.output_dir}/${benchmark.task}.metrics.json
     desc: |
       Run benchmark evaluation using OLMES with vLLM support.
 
