@@ -1,5 +1,4 @@
 vars:
-  - benchmark_output_dir: "memorization_kfac/benchmarks"
   - olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"
 
 stages:
@@ -48,14 +47,14 @@ stages:
       ${collect_kfac.args}
       --batch_size ${model.collect_batch_size}
       --target_blocks ${model.target_blocks}
-      --save_dir ${method.factors_dir}/olmo2_${model.size}
+      --save_dir ${out_dir.collect_kfac}
       ${computed.sample_labels_flag}
       ${computed.fsdp_flag}
       ${computed.world_size_flag}
     deps:
       - ${method.collect_script}
     outs:
-      - ${method.factors_dir}/olmo2_${model.size}
+      - ${out_dir.collect_kfac}
     desc: |
       Collect K-FAC factors for the specified model and method.
 
@@ -77,12 +76,12 @@ stages:
 
   eval_kfac:
     cmd: >-
-      MEM_KFAC_FACTORS_ROOT=${method.factors_dir}
-      MEM_KFAC_CACHE_DIR=${method.cache_dir}_${model.size}
+      MEM_KFAC_FACTORS_ROOT=${out_dir.collect_kfac}
+      MEM_KFAC_CACHE_DIR=${out_dir.eval_kfac}
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size ${model.size}
       --layers-json "${model.layers_json}"
-      --results-dir ${method.metrics_dir}
+      --results-dir metrics_${out_dir.eval_kfac}
       --results-tag ${model.size}
       --use-cache --refresh-cache --perplexity
       ${eval_kfac.args}
@@ -90,13 +89,13 @@ stages:
       ${computed.eigenvalue_corrections_flag}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
-      - ${method.factors_dir}/olmo2_${model.size}
+      - ${out_dir.collect_kfac}
       - memorization_kfac/data/pile10k_None.txt
       - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
     outs:
-      - ${method.cache_dir}_${model.size}
+      - ${out_dir.eval_kfac}
     metrics:
-      - ${method.metrics_dir}/kfac_eval_log_${model.size}_${model.size}.jsonl
+      - metrics_${out_dir.eval_kfac}/kfac_eval_log_${model.size}_${model.size}.jsonl
     desc: |
       Apply K-FAC weight editing and evaluate memorization.
 
@@ -119,15 +118,15 @@ stages:
   validate_results:
     cmd: >-
       python memorization_kfac/evaluations/validate_paper_results.py
-      --results-file ${method.metrics_dir}/kfac_eval_log_${model.size}_${model.size}.jsonl
+      --results-file metrics_${out_dir.eval_kfac}/kfac_eval_log_${model.size}_${model.size}.jsonl
       --model-size ${model.size}
       --tolerance 0.05
-      --output ${method.metrics_dir}/validation_${model.size}.json
+      --output metrics_${out_dir.eval_kfac}/validation_${model.size}.json
     deps:
       - memorization_kfac/evaluations/validate_paper_results.py
-      - ${method.metrics_dir}/kfac_eval_log_${model.size}_${model.size}.jsonl
+      - metrics_${out_dir.eval_kfac}/kfac_eval_log_${model.size}_${model.size}.jsonl
     metrics:
-      - ${method.metrics_dir}/validation_${model.size}.json
+      - metrics_${out_dir.eval_kfac}/validation_${model.size}.json
     desc: |
       Validate results against paper values.
 
@@ -142,16 +141,16 @@ stages:
     cmd: >-
       python memorization_kfac/evaluations/plot_figure2_activation_ratios.py
       --model-size ${model.size}
-      --kfac-dir ${method.factors_dir}/olmo2_${model.size}
+      --kfac-dir ${out_dir.collect_kfac}
       --projection up
       --n-samples 100
       --batch-size 8
-      --output-dir memorization_kfac/plots/figure2_${model.size}
+      --output-dir plots_${out_dir.plot_figure2}
     deps:
       - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
-      - ${method.factors_dir}/olmo2_${model.size}
+      - ${out_dir.collect_kfac}
     plots:
-      - memorization_kfac/plots/figure2_${model.size}
+      - plots_${out_dir.plot_figure2}
     desc: |
       Generate Figure 2: K-FAC eigenvector activation ratios.
 
@@ -168,12 +167,12 @@ stages:
       olmes
       --model ${model.name}
       ${benchmark.args}
-      --output-dir ${benchmark_output_dir}/${benchmark.args.task}
-      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark_output_dir}/${benchmark.args.task}/metrics.json ${benchmark_output_dir}/${benchmark.args.task}.metrics.json
+      --output-dir ${out_dir.benchmark}/${benchmark.args.task}
+      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${out_dir.benchmark}/${benchmark.args.task}/metrics.json metrics_${out_dir.benchmark}/${benchmark.args.task}.json
     outs:
-      - ${benchmark_output_dir}/${benchmark.args.task}
+      - ${out_dir.benchmark}/${benchmark.args.task}
     metrics:
-      - ${benchmark_output_dir}/${benchmark.args.task}.metrics.json
+      - metrics_${out_dir.benchmark}/${benchmark.args.task}.json
     desc: |
       Run benchmark evaluation using OLMES with vLLM support.
 
