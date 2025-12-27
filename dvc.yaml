@@ -45,8 +45,7 @@ stages:
       python ${method.collect_script}
       --model ${model.name}
       ${collect_kfac.args}
-      --batch_size ${model.collect_batch_size}
-      --target_blocks ${model.target_blocks}
+      ${model.args_collect_kfac}
       --save_dir ${out_dir.collect_kfac}
       ${computed.sample_labels_flag}
       ${computed.fsdp_flag}
@@ -79,12 +78,10 @@ stages:
       MEM_KFAC_FACTORS_ROOT=${out_dir.collect_kfac}
       MEM_KFAC_CACHE_DIR=${out_dir.eval_kfac}
       python memorization_kfac/evaluations/eval_mem_kfac.py
-      --model-size ${model.size}
-      --layers-json "${model.layers_json}"
       --results-dir metrics_${out_dir.eval_kfac}
-      --results-tag ${model.size}
       --use-cache --refresh-cache --perplexity
       ${eval_kfac.args}
+      ${model.args_eval_kfac}
       ${method.bergson_factors_arg}
       ${computed.eigenvalue_corrections_flag}
     deps:

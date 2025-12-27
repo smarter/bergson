@@ -26,7 +26,6 @@ collect_kfac:
     corpus: "dolmo"
     nbytes: 100000000  # ~100MB (~20M tokens)
     seq_len: 512
-    layers_per_pass: 1
 
 # Multi-GPU settings (bergson only)
 fsdp: false
@@ -36,6 +35,8 @@ world_size: null  # Set to number of GPUs
 eval_kfac:
   args:
     bs: 96
+    model-size: "${model.size}"
+    results-tag: "${model.size}"
 
 # Computed command-line flags (using resolvers from hydra_plugins/resolvers.py)
 computed:

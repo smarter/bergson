@@ -2,9 +2,12 @@
 # @package model
 name: "allenai/OLMo-2-1124-7B"
 size: "7b"
-# Layers to edit (late layers, as per paper Section 5)
-target_blocks: "23 24 25"
-# Layer config for eval (60% energy in gate/up, 100% in down)
-layers_json: '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
-# Collection batch size for 7B
-collect_batch_size: 24
+
+# Args for collect_kfac stage
+args_collect_kfac:
+  batch_size: 24
+  target_blocks: "23 24 25"  # Late layers, as per paper Section 5
+
+args_eval_kfac:
+  layers-json: '{"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}'
+  layers_per_pass: 3
