@@ -45,13 +45,8 @@ stages:
     cmd: >-
       python ${method.collect_script}
       --model ${model.name}
-      --device ${collect_kfac.device}
-      --dtype ${collect_kfac.dtype}
-      --corpus ${collect_kfac.corpus}
-      --nbytes ${collect_kfac.nbytes}
-      --seq_len ${collect_kfac.seq_len}
+      ${collect_kfac.args}
       --batch_size ${model.collect_batch_size}
-      --layers_per_pass ${collect_kfac.layers_per_pass}
       --target_blocks ${model.target_blocks}
       --save_dir ${method.factors_dir}/olmo2_${model.size}
       ${computed.sample_labels_flag}
@@ -87,11 +82,10 @@ stages:
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size ${model.size}
       --layers-json "${model.layers_json}"
-      --use-cache --refresh-cache
-      --perplexity
-      --bs ${kfac_edit.batch_size}
       --results-dir ${method.metrics_dir}
       --results-tag ${model.size}
+      --use-cache --refresh-cache --perplexity
+      ${eval_kfac.args}
       ${method.bergson_factors_arg}
       ${computed.eigenvalue_corrections_flag}
     deps:
@@ -173,14 +167,13 @@ stages:
       uvx --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${olmes_commit}"
       olmes
       --model ${benchmark.model}
-      --task ${benchmark.task}
-      --batch-size ${benchmark.batch_size}
-      --output-dir ${benchmark_output_dir}/${benchmark.task}
-      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark_output_dir}/${benchmark.task}/metrics.json ${benchmark_output_dir}/${benchmark.task}.metrics.json
+      ${benchmark.args}
+      --output-dir ${benchmark_output_dir}/${benchmark.args.task}
+      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark_output_dir}/${benchmark.args.task}/metrics.json ${benchmark_output_dir}/${benchmark.args.task}.metrics.json
     outs:
-      - ${benchmark_output_dir}/${benchmark.task}
+      - ${benchmark_output_dir}/${benchmark.args.task}
     metrics:
-      - ${benchmark_output_dir}/${benchmark.task}.metrics.json
+      - ${benchmark_output_dir}/${benchmark.args.task}.metrics.json
     desc: |
       Run benchmark evaluation using OLMES with vLLM support.
 

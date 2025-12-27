@@ -11,21 +11,23 @@ defaults:
 
 # Shared collection parameters
 collect_kfac:
-  device: "cuda"
-  dtype: "bfloat16"
-  corpus: "dolmo"
-  nbytes: 100000000  # ~100MB (~20M tokens)
-  seq_len: 512
-  layers_per_pass: 1
   sample_labels: true
+  args:
+    device: "cuda"
+    dtype: "bfloat16"
+    corpus: "dolmo"
+    nbytes: 100000000  # ~100MB (~20M tokens)
+    seq_len: 512
+    layers_per_pass: 1
 
 # Multi-GPU settings (bergson only)
 fsdp: false
 world_size: null  # Set to number of GPUs
 
 # K-FAC Edit Parameters
-kfac_edit:
-  batch_size: 96  # Batch size for evaluation
+eval_kfac:
+  args:
+    bs: 96
 
 # Computed command-line flags (using resolvers from hydra_plugins/resolvers.py)
 computed:
