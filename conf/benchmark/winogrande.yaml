@@ -1,5 +1,5 @@
-# Winogrande benchmark (commonsense reasoning)
-# @package benchmark
-args:
-  task: "winogrande::olmes"
-  batch-size: 128
+# @package _global_
+benchmark:
+  args:
+    task: "winogrande::olmes"
+    batch-size: 128

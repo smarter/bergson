@@ -45,7 +45,6 @@ stages:
       python ${method.collect_script}
       --model ${model.name}
       ${collect_kfac.args}
-      ${model.args_collect_kfac}
       --save_dir ${out_dir.collect_kfac}
       ${computed.sample_labels_flag}
       ${computed.fsdp_flag}
@@ -81,7 +80,6 @@ stages:
       --results-dir metrics_${out_dir.eval_kfac}
       --use-cache --refresh-cache --perplexity
       ${eval_kfac.args}
-      ${model.args_eval_kfac}
       ${method.bergson_factors_arg}
       ${computed.eigenvalue_corrections_flag}
     deps:

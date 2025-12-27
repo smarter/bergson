@@ -1,5 +1,5 @@
-# GSM8K benchmark (grade school math, 8-shot)
-# @package benchmark
-args:
-  task: "gsm8k::olmes"
-  batch-size: 32
+# @package _global_
+benchmark:
+  args:
+    task: "gsm8k::olmes"
+    batch-size: 32

@@ -1,9 +1,13 @@
-# @package model
-name: "allenai/OLMo-2-1124-7B"
-size: "7b"
+# @package _global_
+model:
+  name: "allenai/OLMo-2-1124-7B"
+  size: "7b"
 
-args_collect_kfac:
-  batch_size: 24
+collect_kfac:
+  args:
+    batch_size: 24
 
-args_eval_kfac:
-  bs: 96 # batch size
+
+eval_kfac:
+  args:
+    bs: 96 # batch size

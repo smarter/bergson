@@ -1,6 +1,6 @@
-# Goodfire K-FAC implementation
-# @package method
-name: "goodfire"
-use_eigenvalue_corrections: false
-collect_script: "memorization_kfac/data/collect_kfac_multilayer.py"
-bergson_factors_arg: ""
+# @package _global_
+method:
+  name: "goodfire"
+  use_eigenvalue_corrections: false
+  collect_script: "memorization_kfac/data/collect_kfac_multilayer.py"
+  bergson_factors_arg: ""
