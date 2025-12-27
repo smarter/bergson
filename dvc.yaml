@@ -633,7 +633,10 @@ stages:
       - benchmark.output_dir
       - benchmark.olmes_commit
     outs:
-      - ${benchmark.output_dir}/${benchmark.task}
+      - ${benchmark.output_dir}/${benchmark.task}:
+          persist: true
+    metrics:
+      - ${benchmark.output_dir}/${benchmark.task}/metrics.json
     desc: |
       Run benchmark evaluation using OLMES with vLLM support.
 
@@ -651,3 +654,6 @@ stages:
       Uses uvx to run olmes in an isolated environment, avoiding dependency
       conflicts with the main project (olmes requires fsspec==2023.5.0,
       which conflicts with dvc). Includes [gpu] extras for vLLM acceleration.
+
+      Output: metrics.json contains primary_score and detailed metrics (acc_raw, etc.)
+      View with: dvc metrics show
