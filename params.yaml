@@ -47,3 +47,4 @@ benchmark:
   task: "gsm8k::olmes"  # Task name (gsm8k::olmes, winogrande::olmes)
   output_dir: "memorization_kfac/benchmarks"  # Output directory for results
   olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"  # Pinned olmes commit
+  batch_size: 8
