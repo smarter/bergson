@@ -40,3 +40,10 @@ kfac_edit:
   layers_json: '{}'  # e.g., '{"31": {"gate": 0.8, "up": 0.8, "down": 0.8}}'
   eigenvalue_corrections: "--eigenvalue-corrections"  # Set to "--eigenvalue-corrections" to use EK-FAC pair selection
   batch_size: 96  # Batch size for evaluation
+
+# Benchmark Evaluation Parameters (using olmes)
+benchmark:
+  model: "allenai/OLMo-2-0425-1B"  # Model to evaluate
+  task: "gsm8k::olmes"  # Task name (gsm8k::olmes, winogrande::olmes)
+  output_dir: "memorization_kfac/benchmarks"  # Output directory for results
+  olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"  # Pinned olmes commit

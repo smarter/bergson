@@ -613,3 +613,34 @@ stages:
       - Cosine similarity
       - Max/mean absolute difference
       Reports aggregate statistics across all modules.
+
+  # =============================================================================
+  # Benchmark Evaluation (using olmes)
+  # =============================================================================
+  # Run standard benchmarks using AllenAI's OLMES framework.
+  # Uses uvx to run olmes in an isolated environment (avoids dependency conflicts).
+
+  benchmark:
+    cmd: >-
+      uvx --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${benchmark.olmes_commit}"
+      olmes
+      --model ${benchmark.model}
+      --task ${benchmark.task}
+      --output-dir ${benchmark.output_dir}/${benchmark.task}
+    params:
+      - benchmark.model
+      - benchmark.task
+      - benchmark.output_dir
+      - benchmark.olmes_commit
+    outs:
+      - ${benchmark.output_dir}/${benchmark.task}
+    desc: |
+      Run benchmark evaluation using OLMES with vLLM support.
+
+      Supported tasks:
+      - gsm8k::olmes - Grade school math (8-shot)
+      - winogrande::olmes - Commonsense reasoning
+
+      Uses uvx to run olmes in an isolated environment, avoiding dependency
+      conflicts with the main project (olmes requires fsspec==2023.5.0,
+      which conflicts with dvc). Includes [gpu] extras for vLLM acceleration.
