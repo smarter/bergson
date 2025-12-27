@@ -166,7 +166,7 @@ stages:
     cmd: >-
       uvx --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${olmes_commit}"
       olmes
-      --model ${benchmark.model}
+      --model ${model.name}
       ${benchmark.args}
       --output-dir ${benchmark_output_dir}/${benchmark.args.task}
       && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark_output_dir}/${benchmark.args.task}/metrics.json ${benchmark_output_dir}/${benchmark.args.task}.metrics.json

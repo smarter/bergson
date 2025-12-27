@@ -36,6 +36,3 @@ computed:
   fsdp_flag: "${if:${fsdp},'--fsdp',''}"
   world_size_flag: "${if_set:${world_size},'--world_size'}"
 
-# Benchmark Evaluation Parameters (shared settings)
-benchmark:
-  model: "olmo-2-7b-1124"

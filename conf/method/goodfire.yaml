@@ -1,6 +1,6 @@
-# Original K-FAC implementation (memorization_kfac)
+# Goodfire K-FAC implementation
 # @package method
-name: "original"
+name: "goodfire"
 use_eigenvalue_corrections: false
 # Collection script
 collect_script: "memorization_kfac/data/collect_kfac_multilayer.py"
@@ -8,5 +8,5 @@ collect_script: "memorization_kfac/data/collect_kfac_multilayer.py"
 factors_dir: "memorization_kfac/data/kfac_factors_paper"
 cache_dir: "memorization_kfac/cache/kfac_weights_paper"
 metrics_dir: "memorization_kfac/metrics"
-# Computed flag for eval_kfac (not used for original method)
+# Computed flag for eval_kfac (not used for goodfire method)
 bergson_factors_arg: ""
