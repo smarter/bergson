@@ -6,6 +6,7 @@
 defaults:
   - model: 7b
   - method: bergson
+  - benchmark: gsm8k
   - _self_
 
 # Shared collection parameters
@@ -36,10 +37,8 @@ computed:
   fsdp_flag: "${if:${fsdp},'--fsdp',''}"
   world_size_flag: "${if_set:${world_size},'--world_size'}"
 
-# Benchmark Evaluation Parameters (using olmes)
+# Benchmark Evaluation Parameters (shared settings)
 benchmark:
   model: "olmo-2-7b-1124"
-  task: "gsm8k::olmes"
   output_dir: "memorization_kfac/benchmarks"
   olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"
-  batch_size: 8

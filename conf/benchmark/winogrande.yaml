@@ -1,0 +1,4 @@
+# Winogrande benchmark (commonsense reasoning)
+# @package benchmark
+task: "winogrande::olmes"
+batch_size: 128
