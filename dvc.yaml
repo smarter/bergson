@@ -86,7 +86,7 @@ stages:
       MEM_KFAC_CACHE_DIR=${method.cache_dir}_${model.size}
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size ${model.size}
-      --layers-json ${model.layers_json}
+      --layers-json "${model.layers_json}"
       --use-cache --refresh-cache
       --perplexity
       --bs ${kfac_edit.batch_size}
