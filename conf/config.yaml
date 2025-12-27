@@ -27,8 +27,6 @@ collect_kfac:
 
 eval_kfac:
   args:
-    model-size: ${model.size}
-    results-tag: ${model.size}
     layers-json: ${json:${model_method.layers}}
 
 
@@ -41,9 +39,10 @@ out_dir:
   plot_figure2: "out/plot_figure2/${out_suffix}"
   benchmark: "out/benchmark/${out_suffix}"
 
-# Computed command-line flags (using resolvers from hydra_plugins/resolvers.py)
 computed:
-  eigenvalue_corrections_flag: "${if:${method.use_eigenvalue_corrections},'--eigenvalue-corrections',''}"
+  # Flags that cannot be represented as "key: value" because they don't have a
+  # value (dvc expands "key: null" as "--key None").
+  eigenvalue_corrections_flag: "${if:${eval_kfac.use_eigenvalue_corrections},'--eigenvalue-corrections',''}"
   sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
   fsdp_flag: "${if:${fsdp},'--fsdp',''}"
   world_size_flag: "${if_set:${world_size},'--world_size'}"

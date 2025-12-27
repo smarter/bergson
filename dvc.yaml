@@ -42,15 +42,17 @@ stages:
 
   collect_kfac:
     cmd: >-
-      python ${method.collect_script}
+      python ${collect_kfac.script}
       --model ${model.name}
-      ${collect_kfac.args}
+      --model-size ${model.size}
+      --results-tag ${model.size}
       --save_dir ${out_dir.collect_kfac}
+      ${collect_kfac.args}
       ${computed.sample_labels_flag}
       ${computed.fsdp_flag}
       ${computed.world_size_flag}
     deps:
-      - ${method.collect_script}
+      - ${collect_kfac.script}
     outs:
       - ${out_dir.collect_kfac}
     desc: |
@@ -80,7 +82,6 @@ stages:
       --results-dir metrics_${out_dir.eval_kfac}
       --use-cache --refresh-cache --perplexity
       ${eval_kfac.args}
-      ${method.bergson_factors_arg}
       ${computed.eigenvalue_corrections_flag}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py

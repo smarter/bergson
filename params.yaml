@@ -1,22 +1,9 @@
 model:
   name: allenai/OLMo-2-1124-7B
   size: 7b
-  args_collect_kfac:
-    batch_size: 24
-method:
-  name: bergson
-  use_eigenvalue_corrections: true
-  collect_script: memorization_kfac/data/collect_kfac_bergson.py
-  bergson_factors_arg: --bergson-factors out/collect_kfac/bergson/7b
-benchmark:
-  args:
-    task: gsm8k::olmes
-    batch-size: 32
-fsdp: false
-world_size: null
 collect_kfac:
-  sample_labels: true
   args:
+    batch_size: 24
     device: cuda
     dtype: bfloat16
     corpus: dolmo
@@ -26,62 +13,23 @@ collect_kfac:
     - '23'
     - '24'
     - '25'
+    layers_per_pass: 3
+  script: memorization_kfac/data/collect_kfac_bergson.py
+  sample_labels: true
 eval_kfac:
-  _layers:
-    7b:
-      goodfire:
-        '23':
-          gate: 0.6
-          up: 0.6
-          down: 1.0
-        '24':
-          gate: 0.6
-          up: 0.6
-          down: 1.0
-        '25':
-          gate: 0.6
-          up: 0.6
-          down: 1.0
-      bergson:
-        '23':
-          gate: 0.4
-          up: 0.4
-          down: 1.0
-        '24':
-          gate: 0.4
-          up: 0.4
-          down: 1.0
-        '25':
-          gate: 0.4
-          up: 0.4
-          down: 1.0
-    1b:
-      goodfire:
-        '13':
-          gate: 0.6
-          up: 0.6
-          down: 1.0
-        '14':
-          gate: 0.6
-          up: 0.6
-          down: 1.0
-        '15':
-          gate: 0.6
-          up: 0.6
-          down: 1.0
-      bergson:
-        '13':
-          gate: 0.4
-          up: 0.4
-          down: 1.0
-        '14':
-          gate: 0.4
-          up: 0.4
-          down: 1.0
-        '15':
-          gate: 0.4
-          up: 0.4
-          down: 1.0
+  args:
+    bs: 96
+    bergson-factors: out/collect_kfac/bergson/7b
+    layers-json: '{"23": {"gate": 0.4, "up": 0.4, "down": 1.0}, "24": {"gate": 0.4,
+      "up": 0.4, "down": 1.0}, "25": {"gate": 0.4, "up": 0.4, "down": 1.0}}'
+  use_eigenvalue_corrections: true
+method:
+  name: bergson
+benchmark:
+  args:
+    task: gsm8k::olmes
+    batch-size: 32
+model_method:
   layers:
     '23':
       gate: 0.4
@@ -95,13 +43,8 @@ eval_kfac:
       gate: 0.4
       up: 0.4
       down: 1.0
-  args:
-    bs: 96
-    model-size: 7b
-    results-tag: 7b
-    layers-json: '{"23": {"gate": 0.4, "up": 0.4, "down": 1.0}, "24": {"gate": 0.4,
-      "up": 0.4, "down": 1.0}, "25": {"gate": 0.4, "up": 0.4, "down": 1.0}}'
-    layers_per_pass: 3
+fsdp: false
+world_size: null
 out_suffix: bergson/7b
 out_dir:
   collect_kfac: out/collect_kfac/bergson/7b

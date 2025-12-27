@@ -1,6 +1,11 @@
 # @package _global_
 method:
   name: "bergson"
+
+collect_kfac:
+  script: "memorization_kfac/data/collect_kfac_bergson.py"
+
+eval_kfac:
   use_eigenvalue_corrections: true
-  collect_script: "memorization_kfac/data/collect_kfac_bergson.py"
-  bergson_factors_arg: "--bergson-factors ${out_dir.collect_kfac}"
+  args:
+    bergson-factors: ${out_dir.collect_kfac}
