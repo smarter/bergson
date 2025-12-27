@@ -1,0 +1,35 @@
+# Hydra configuration for K-FAC experiments
+# Usage:
+#   dvc exp run -S model=7b -S method=bergson
+#   dvc exp run --queue -S 'model=1b,7b' -S 'method=original,bergson'
+
+defaults:
+  - model: 7b
+  - method: bergson
+  - _self_
+
+# Shared collection parameters
+collect_kfac:
+  device: "cuda"
+  dtype: "bfloat16"
+  corpus: "dolmo"
+  nbytes: 100000000  # ~100MB (~20M tokens)
+  seq_len: 512
+  layers_per_pass: 1
+  sample_labels: "--sample_labels"
+
+# Multi-GPU settings (bergson only)
+fsdp: ""  # Set to "--fsdp" to enable FSDP
+world_size: ""  # Set to "--world_size N" to specify GPU count
+
+# K-FAC Edit Parameters
+kfac_edit:
+  batch_size: 96  # Batch size for evaluation
+
+# Benchmark Evaluation Parameters (using olmes)
+benchmark:
+  model: "olmo-2-7b-1124"
+  task: "gsm8k::olmes"
+  output_dir: "memorization_kfac/benchmarks"
+  olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"
+  batch_size: 8
