@@ -1,7 +1,6 @@
 # Bergson K-FAC implementation
 # @package method
 name: "bergson"
-use_bergson: true
 use_eigenvalue_corrections: true
 # Collection script
 collect_script: "memorization_kfac/data/collect_kfac_bergson.py"
@@ -9,3 +8,5 @@ collect_script: "memorization_kfac/data/collect_kfac_bergson.py"
 factors_dir: "memorization_kfac/data/kfac_factors_paper_bergson"
 cache_dir: "memorization_kfac/cache/kfac_weights_paper_bergson"
 metrics_dir: "memorization_kfac/metrics_bergson"
+# Computed flag for eval_kfac
+bergson_factors_arg: "--bergson-factors ${.factors_dir}/olmo2_${model.size}"

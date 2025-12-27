@@ -92,7 +92,7 @@ stages:
       --bs ${kfac_edit.batch_size}
       --results-dir ${method.metrics_dir}
       --results-tag ${model.size}
-      ${computed.bergson_factors_arg}
+      ${method.bergson_factors_arg}
       ${computed.eigenvalue_corrections_flag}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
