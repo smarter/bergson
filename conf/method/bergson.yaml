@@ -4,6 +4,8 @@ method:
 
 collect_kfac:
   script: "memorization_kfac/data/collect_kfac_bergson.py"
+  fsdp: true
+  world_size: 8
 
 eval_kfac:
   use_eigenvalue_corrections: true

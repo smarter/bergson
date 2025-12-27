@@ -10,10 +10,6 @@ defaults:
   - model_method: ${model}_${method} # loads model_method/7b_bergson.yaml
   - _self_
 
-
-fsdp: false
-world_size: null  # Set to number of GPUs
-
 collect_kfac:
   sample_labels: true
   args:
@@ -44,5 +40,5 @@ computed:
   # value (dvc expands "key: null" as "--key None").
   eigenvalue_corrections_flag: "${if:${eval_kfac.use_eigenvalue_corrections},'--eigenvalue-corrections',''}"
   sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
-  fsdp_flag: "${if:${fsdp},'--fsdp',''}"
-  world_size_flag: "${if_set:${world_size},'--world_size'}"
+  fsdp_flag: "${if:${collect_kfac.fsdp},'--fsdp',''}"
+  world_size_flag: "${if_set:${collect_kfac.world_size},'--world_size'}"
