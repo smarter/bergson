@@ -1,0 +1,4 @@
+# @package model_method
+layers:
+  # Untuned
+  {"13": {"gate": 0.40, "up": 0.40, "down": 1.0}, "14": {"gate": 0.40, "up": 0.40, "down": 1.0}, "15": {"gate": 0.40, "up": 0.40, "down": 1.0}}

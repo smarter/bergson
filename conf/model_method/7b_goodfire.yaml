@@ -1,0 +1,4 @@
+# @package model_method
+layers:
+  # From the Goodfire paper (Appendix D)
+  {"23": {"gate": 0.40, "up": 0.40, "down": 1.0}, "24": {"gate": 0.40, "up": 0.40, "down": 1.0}, "25": {"gate": 0.40, "up": 0.40, "down": 1.0}}

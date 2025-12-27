@@ -4,9 +4,10 @@
 #   dvc exp run --queue -S 'model=1b,7b' -S 'method=original,bergson'
 
 defaults:
-  - model: 7b
+  - model: 7b # loads model/7b.yaml
   - method: bergson
   - benchmark: gsm8k
+  - model_method: ${model}_${method} # loads model_method/7b_bergson.yaml
   - _self_
 
 
@@ -21,30 +22,14 @@ collect_kfac:
     corpus: "dolmo"
     nbytes: 100000000  # ~100MB (~20M tokens)
     seq_len: 512
-    target_blocks: ${oc.dict.keys:eval_kfac.layers}
-    layers_per_pass: ${len:${eval_kfac.layers}}
+    target_blocks: ${oc.dict.keys:model_method.layers}
+    layers_per_pass: ${len:${model_method.layers}}
 
 eval_kfac:
-  _layers:
-    "7b":
-      "goodfire":
-        # From the Goodfire paper (Appendix D)
-        {"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}
-      "bergson":
-        # Tuned to approximately match goodfire wrt to the numbers of preserved eigenvalues
-        {"23": {"gate": 0.40, "up": 0.40, "down": 1.0}, "24": {"gate": 0.40, "up": 0.40, "down": 1.0}, "25": {"gate": 0.40, "up": 0.40, "down": 1.0}}
-    "1b":
-      "goodfire":
-        # Not specified in the paper, doesn't work well as-is.
-        {"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}
-      "bergson":
-        # Untuned
-        {"13": {"gate": 0.40, "up": 0.40, "down": 1.0}, "14": {"gate": 0.40, "up": 0.40, "down": 1.0}, "15": {"gate": 0.40, "up": 0.40, "down": 1.0}}
-  layers: ${._layers[${model.size}][${method.name}]}
   args:
     model-size: ${model.size}
     results-tag: ${model.size}
-    layers-json: ${json:${..layers}}
+    layers-json: ${json:${model_method.layers}}
 
 
 
