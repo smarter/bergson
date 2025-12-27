@@ -1,50 +1,115 @@
-# Model Configuration
 model:
-  name: "allenai/OLMo-2-0425-1B"
-  size: "1b"
-
-
-# Multi-GPU settings (bergson only)
-fsdp: ""  # Set to "--fsdp" to enable FSDP
-world_size: ""  # Set to "--world_size N" to specify GPU count
-
-# K-FAC Collection Parameters
-collect_kfac:
-  # Hardware settings
-  device: "cuda"
-  dtype: "bfloat16"  # choices: float32, bfloat16
-
-  # Data settings
-  corpus: "dolmo"  # choices: olmo, dolmo
-  # nbytes: 10000000  # ~10MB of text data (~2M tokens) for comparison
-  nbytes: 100000
-  seq_len: 512
-  batch_size: 1 #2 #4 #16  # Increased for more efficient processing
-
-  paper_7b_bergson:
-    dtype: "bfloat16"  # choices: float32, bfloat16
+  name: allenai/OLMo-2-1124-7B
+  size: 7b
+  args_collect_kfac:
     batch_size: 24
-
-  # Layer processing
-  layers_per_pass: 1  # Process this many layers before flushing
-  target_blocks: "13" # 14 15"  # Multiple layers for better comparison coverage
-
-  # Optional: use multinomial-sampled labels instead of gold labels
-  sample_labels: "--sample_labels"  # Set to "" to disable
-
-# K-FAC Edit Parameters
-kfac_edit:
-  # keep_mass ∈ [0,1] controls how much curvature to retain
-  # Higher values = less compression, more memorization retained
-  # Lower values = more compression, less memorization
-  layers_json: '{}'  # e.g., '{"31": {"gate": 0.8, "up": 0.8, "down": 0.8}}'
-  eigenvalue_corrections: "--eigenvalue-corrections"  # Set to "--eigenvalue-corrections" to use EK-FAC pair selection
-  batch_size: 96  # Batch size for evaluation
-
-# Benchmark Evaluation Parameters (using olmes)
+method:
+  name: bergson
+  use_eigenvalue_corrections: true
+  collect_script: memorization_kfac/data/collect_kfac_bergson.py
+  bergson_factors_arg: --bergson-factors out/collect_kfac/bergson/7b
 benchmark:
-  model: "allenai/OLMo-2-0425-1B"  # Model to evaluate
-  task: "gsm8k::olmes"  # Task name (gsm8k::olmes, winogrande::olmes)
-  output_dir: "memorization_kfac/benchmarks"  # Output directory for results
-  olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"  # Pinned olmes commit
-  batch_size: 8
+  args:
+    task: gsm8k::olmes
+    batch-size: 32
+fsdp: false
+world_size: null
+collect_kfac:
+  sample_labels: true
+  args:
+    device: cuda
+    dtype: bfloat16
+    corpus: dolmo
+    nbytes: 100000000
+    seq_len: 512
+    target_blocks:
+    - '23'
+    - '24'
+    - '25'
+eval_kfac:
+  _layers:
+    7b:
+      goodfire:
+        '23':
+          gate: 0.6
+          up: 0.6
+          down: 1.0
+        '24':
+          gate: 0.6
+          up: 0.6
+          down: 1.0
+        '25':
+          gate: 0.6
+          up: 0.6
+          down: 1.0
+      bergson:
+        '23':
+          gate: 0.4
+          up: 0.4
+          down: 1.0
+        '24':
+          gate: 0.4
+          up: 0.4
+          down: 1.0
+        '25':
+          gate: 0.4
+          up: 0.4
+          down: 1.0
+    1b:
+      goodfire:
+        '13':
+          gate: 0.6
+          up: 0.6
+          down: 1.0
+        '14':
+          gate: 0.6
+          up: 0.6
+          down: 1.0
+        '15':
+          gate: 0.6
+          up: 0.6
+          down: 1.0
+      bergson:
+        '13':
+          gate: 0.4
+          up: 0.4
+          down: 1.0
+        '14':
+          gate: 0.4
+          up: 0.4
+          down: 1.0
+        '15':
+          gate: 0.4
+          up: 0.4
+          down: 1.0
+  layers:
+    '23':
+      gate: 0.4
+      up: 0.4
+      down: 1.0
+    '24':
+      gate: 0.4
+      up: 0.4
+      down: 1.0
+    '25':
+      gate: 0.4
+      up: 0.4
+      down: 1.0
+  args:
+    bs: 96
+    model-size: 7b
+    results-tag: 7b
+    layers-json: '{"23": {"gate": 0.4, "up": 0.4, "down": 1.0}, "24": {"gate": 0.4,
+      "up": 0.4, "down": 1.0}, "25": {"gate": 0.4, "up": 0.4, "down": 1.0}}'
+    layers_per_pass: 3
+out_suffix: bergson/7b
+out_dir:
+  collect_kfac: out/collect_kfac/bergson/7b
+  eval_kfac: out/eval_kfac/bergson/7b
+  plot_figure2: out/plot_figure2/bergson/7b
+  benchmark: out/benchmark/bergson/7b
+computed:
+  eigenvalue_corrections_flag: --eigenvalue-corrections
+  sample_labels_flag: --sample_labels
+  fsdp_flag: ''
+  world_size_flag: ''

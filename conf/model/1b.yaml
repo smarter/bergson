@@ -4,8 +4,7 @@ size: "1b"
 
 args_collect_kfac:
   batch_size: 32
-  target_blocks: "13 14 15"  # Keep in sync with eval_kfac._preserved_energy
 
 args_eval_kfac:
-  layers_per_pass: 3
+  bs: 128 # batch size
 

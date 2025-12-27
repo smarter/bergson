@@ -21,13 +21,14 @@ collect_kfac:
     corpus: "dolmo"
     nbytes: 100000000  # ~100MB (~20M tokens)
     seq_len: 512
+    target_blocks: ${oc.dict.keys:eval_kfac.layers}
+    layers_per_pass: ${len:${eval_kfac.layers}}
 
 eval_kfac:
-  # Keep the layers referenced here in sync with model.args_collect_kfac.target_blocks
-  _layers-json:
+  _layers:
     "7b":
       "goodfire":
-        # From the paper
+        # From the Goodfire paper (Appendix D)
         {"23": {"gate": 0.60, "up": 0.60, "down": 1.0}, "24": {"gate": 0.60, "up": 0.60, "down": 1.0}, "25": {"gate": 0.60, "up": 0.60, "down": 1.0}}
       "bergson":
         # Tuned to approximately match goodfire wrt to the numbers of preserved eigenvalues
@@ -39,11 +40,11 @@ eval_kfac:
       "bergson":
         # Untuned
         {"13": {"gate": 0.40, "up": 0.40, "down": 1.0}, "14": {"gate": 0.40, "up": 0.40, "down": 1.0}, "15": {"gate": 0.40, "up": 0.40, "down": 1.0}}
+  layers: ${._layers[${model.size}][${method.name}]}
   args:
-    bs: 96
     model-size: ${model.size}
     results-tag: ${model.size}
-    layers-json: ${json:${.._layers-json[${model.size}][${method.name}]}}
+    layers-json: ${json:${..layers}}
 
 
 
