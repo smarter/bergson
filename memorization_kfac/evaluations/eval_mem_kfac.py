@@ -629,15 +629,14 @@ def main():
     if 'ndcg' in results:
         print(f"\nnDCG@10: {results['ndcg']:.4f}")
 
-    # Save final edited model to central location
+    # Save final edited model in HuggingFace format (for use with olmes benchmarks)
     safe_model = model_name.replace("/", "__")
     edited_root = DATA_PATHS.MODELS_KFAC_DIR
     layer_cfg_tag = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in json.dumps(layer_to_variances, sort_keys=True)) or "no_layers"
     save_dir = os.path.join(edited_root, args.model_size, safe_model, layer_cfg_tag)
-    os.makedirs(save_dir, exist_ok=True)
-    model_path = os.path.join(save_dir, f"{safe_model}.pt")
-    torch.save({"model_state_dict": model.state_dict()}, model_path)
-    print(f"Saved edited model to: {model_path}")
+    model.save_pretrained(save_dir)
+    tokenizer.save_pretrained(save_dir)
+    print(f"Saved edited model to: {save_dir}")
 
     evaluator.save_results(
         results,
@@ -649,7 +648,7 @@ def main():
             "elapsed_sec": round(time.time() - t0, 2),
             "dtype": args.dtype,
             "use_cache": args.use_cache,
-            "edited_model_path": model_path,
+            "edited_model_path": save_dir,
             # Persist BSN-style perplexities for centralized comparison
             "kfac_perplexity_bsn_pre": float(pre_ppl_bsn) if ('pre_ppl_bsn' in locals() and pre_ppl_bsn is not None) else None,
             "kfac_perplexity_bsn_post": float(post_ppl_bsn) if post_ppl_bsn is not None else None,

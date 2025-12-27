@@ -641,6 +641,13 @@ stages:
       - gsm8k::olmes - Grade school math (8-shot)
       - winogrande::olmes - Commonsense reasoning
 
+      The model parameter can be:
+      - A HuggingFace model ID (e.g., allenai/OLMo-2-0425-1B)
+      - A local path to an edited model saved by eval_mem_kfac.py
+
+      Example with edited model:
+        dvc repro benchmark -S benchmark.model=memorization_kfac/edited_models/models_kfac/7b/...
+
       Uses uvx to run olmes in an isolated environment, avoiding dependency
       conflicts with the main project (olmes requires fsspec==2023.5.0,
       which conflicts with dvc). Includes [gpu] extras for vLLM acceleration.
