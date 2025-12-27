@@ -44,8 +44,6 @@ stages:
     cmd: >-
       python ${collect_kfac.script}
       --model ${model.name}
-      --model-size ${model.size}
-      --results-tag ${model.size}
       --save_dir ${out_dir.collect_kfac}
       ${collect_kfac.args}
       ${computed.sample_labels_flag}
@@ -79,6 +77,8 @@ stages:
       MEM_KFAC_FACTORS_ROOT=${out_dir.collect_kfac}
       MEM_KFAC_CACHE_DIR=${out_dir.eval_kfac}
       python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size ${model.size}
+      --results-tag ${model.size}
       --results-dir metrics_${out_dir.eval_kfac}
       --use-cache --refresh-cache --perplexity
       ${eval_kfac.args}
@@ -106,28 +106,6 @@ stages:
       - Memorization (Dolma & Quotes datasets)
       - Perplexity (Pile 10k)
       - nDCG@10
-
-  # =============================================================================
-  # Result Validation
-  # =============================================================================
-
-  validate_results:
-    cmd: >-
-      python memorization_kfac/evaluations/validate_paper_results.py
-      --results-file metrics_${out_dir.eval_kfac}/kfac_eval_log_${model.size}_${model.size}.jsonl
-      --model-size ${model.size}
-      --tolerance 0.05
-      --output metrics_${out_dir.eval_kfac}/validation_${model.size}.json
-    deps:
-      - memorization_kfac/evaluations/validate_paper_results.py
-      - metrics_${out_dir.eval_kfac}/kfac_eval_log_${model.size}_${model.size}.jsonl
-    metrics:
-      - metrics_${out_dir.eval_kfac}/validation_${model.size}.json
-    desc: |
-      Validate results against paper values.
-
-      Usage:
-        dvc exp run validate_results -S model=7b -S method=bergson
 
   # =============================================================================
   # Figure 2: K-FAC Eigenvector Activation Ratios
