@@ -627,7 +627,7 @@ stages:
       --model ${benchmark.model}
       --task ${benchmark.task}
       --output-dir ${benchmark.output_dir}/${benchmark.task}
-      && cp ${benchmark.output_dir}/${benchmark.task}/metrics.json ${benchmark.output_dir}/${benchmark.task}.metrics.json
+      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${benchmark.output_dir}/${benchmark.task}/metrics.json ${benchmark.output_dir}/${benchmark.task}.metrics.json
     params:
       - benchmark.model
       - benchmark.task
