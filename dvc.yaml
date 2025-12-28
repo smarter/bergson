@@ -12,19 +12,19 @@ stages:
     deps:
       - memorization_kfac/data/prepare_pile10k.py
     outs:
-      - memorization_kfac/data/pile10k_None.txt
+      - ${out_dir.prepare_pile10k}
     desc: |
       Download and prepare pile10k dataset from HuggingFace (NeelNanda/pile-10k).
       This dataset is used for nDCG evaluation in the validation stages.
 
   prepare_pile10k_cache:
     cmd:
-      - python memorization_kfac/data/prepare_pile10k_cache.py
+      - MEM_EVAL_PT_CACHE=${out_dir.prepare_pile10k_cache} python memorization_kfac/data/prepare_pile10k_cache.py
     deps:
       - memorization_kfac/data/prepare_pile10k_cache.py
-      - memorization_kfac/data/pile10k_None.txt
+      - ${out_dir.prepare_pile10k}
     outs:
-      - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+      - ${out_dir.prepare_pile10k_cache}
     desc: |
       Generate pre-tokenized cache for pile10k perplexity evaluation.
       Creates a .pt file with tokenized pile10k data in blocks of size 112.
@@ -76,6 +76,7 @@ stages:
     cmd: >-
       MEM_KFAC_FACTORS_ROOT=${out_dir.collect_kfac}
       MEM_KFAC_CACHE_DIR=${out_dir.eval_kfac}
+      MEM_EVAL_PT_CACHE=${out_dir.prepare_pile10k_cache}
       python memorization_kfac/evaluations/eval_mem_kfac.py
       --model-size ${model.size}
       --results-tag ${model.size}
@@ -86,8 +87,8 @@ stages:
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - ${out_dir.collect_kfac}
-      - memorization_kfac/data/pile10k_None.txt
-      - memorization_kfac/evaluations/bsn_dependencies/data/olmo2_clean_pt_cache_112.pt
+      - ${out_dir.prepare_pile10k}
+      - ${out_dir.prepare_pile10k_cache}
     outs:
       - ${out_dir.eval_kfac}
     metrics:
