@@ -39,9 +39,21 @@ def _len(value: Any) -> int:
     return len(value)
 
 
+def _scale_for_dtype(bf16_batch_size: int, dtype: str) -> int:
+    """Scale batch size based on dtype relative to bfloat16."""
+    if dtype == "float32":
+        return bf16_batch_size // 2
+    elif dtype == "int8":
+        return bf16_batch_size * 2
+    elif dtype == "int4":
+        return bf16_batch_size * 4
+    return bf16_batch_size
+
+
 # Register resolvers
 OmegaConf.register_new_resolver("if", _if_else, replace=True)
 OmegaConf.register_new_resolver("if_not_empty", _if_not_empty, replace=True)
 OmegaConf.register_new_resolver("if_set", _if_set, replace=True)
 OmegaConf.register_new_resolver("json", _json, replace=True)
 OmegaConf.register_new_resolver("len", _len, replace=True)
+OmegaConf.register_new_resolver("scale_for_dtype", _scale_for_dtype, replace=True)

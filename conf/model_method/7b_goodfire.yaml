@@ -5,5 +5,4 @@ model_method:
     {"23": {"gate": 0.40, "up": 0.40, "down": 1.0}, "24": {"gate": 0.40, "up": 0.40, "down": 1.0}, "25": {"gate": 0.40, "up": 0.40, "down": 1.0}}
 
 collect_kfac:
-  args:
-    batch_size: 24
+  bf16_batch_size: 24
