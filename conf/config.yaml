@@ -20,7 +20,7 @@ collect_kfac:
     seq_len: 512
     target_blocks: ${oc.dict.keys:model_method.layers}
     layers_per_pass: ${len:${model_method.layers}}
-    batch_size: "${scale_for_dtype:${..bf16_batch_size},${.dtype}}"
+    batch_size: ${scale_for_dtype:${..bf16_batch_size},${.dtype}}
 
 eval_kfac:
   args:
