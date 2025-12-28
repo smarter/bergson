@@ -630,7 +630,7 @@ def main():
         print(f"\nnDCG@10: {results['ndcg']:.4f}")
 
     # Save final edited model in HuggingFace format (for use with olmes benchmarks)
-    save_dir = DATA_PATHS.EDITED_MODELS_ROOT
+    save_dir = str(DATA_PATHS.EDITED_MODELS_ROOT)
     model.save_pretrained(save_dir)
     tokenizer.save_pretrained(save_dir)
     print(f"Saved edited model to: {save_dir}")
