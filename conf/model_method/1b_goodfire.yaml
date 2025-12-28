@@ -3,3 +3,7 @@ model_method:
   layers:
     # Not specified in the paper, doesn't work well as-is.
     {"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}
+
+collect_kfac:
+  args:
+    batch_size: 168

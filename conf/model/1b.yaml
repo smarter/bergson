@@ -3,10 +3,6 @@ model:
   name: "allenai/OLMo-2-0425-1B"
   size: "1b"
 
-collect_kfac:
-  args:
-    batch_size: 32
-
 eval_kfac:
   args:
     bs: 128 # batch size

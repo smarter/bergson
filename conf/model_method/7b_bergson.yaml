@@ -3,3 +3,7 @@ model_method:
   layers:
     # Tuned to approximately match 7b-goodfire wrt to the numbers of preserved eigenvalues
     {"23": {"gate": 0.40, "up": 0.40, "down": 1.0}, "24": {"gate": 0.40, "up": 0.40, "down": 1.0}, "25": {"gate": 0.40, "up": 0.40, "down": 1.0}}
+
+collect_kfac:
+  args:
+    batch_size: 13
