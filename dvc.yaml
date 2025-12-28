@@ -83,6 +83,7 @@ stages:
       --results-tag ${model.size}
       --results-dir metrics_${out_dir.eval_kfac}
       --use-cache --refresh-cache --perplexity
+      --skip-baseline
       ${eval_kfac.args}
       ${computed.eigenvalue_corrections_flag}
     deps:
