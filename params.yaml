@@ -15,6 +15,8 @@ collect_kfac:
     - '25'
     layers_per_pass: 3
   script: memorization_kfac/data/collect_kfac_bergson.py
+  fsdp: true
+  world_size: 8
   sample_labels: true
 eval_kfac:
   args:
@@ -43,10 +45,10 @@ model_method:
       gate: 0.4
       up: 0.4
       down: 1.0
-fsdp: false
-world_size: null
 out_suffix: bergson/7b
 out_dir:
+  prepare_pile10k: memorization_kfac/data/pile10k_None.txt
+  prepare_pile10k_cache: out/prepare_pile10k_cache
   collect_kfac: out/collect_kfac/bergson/7b
   eval_kfac: out/eval_kfac/bergson/7b
   plot_figure2: out/plot_figure2/bergson/7b
@@ -54,5 +56,5 @@ out_dir:
 computed:
   eigenvalue_corrections_flag: --eigenvalue-corrections
   sample_labels_flag: --sample_labels
-  fsdp_flag: ''
-  world_size_flag: ''
+  fsdp_flag: --fsdp
+  world_size_flag: --world_size 8

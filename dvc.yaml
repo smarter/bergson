@@ -19,7 +19,7 @@ stages:
 
   prepare_pile10k_cache:
     cmd:
-      - MEM_EVAL_PT_CACHE=${out_dir.prepare_pile10k_cache} python memorization_kfac/data/prepare_pile10k_cache.py
+      - python memorization_kfac/data/prepare_pile10k_cache.py --output ${out_dir.prepare_pile10k_cache}
     deps:
       - memorization_kfac/data/prepare_pile10k_cache.py
       - ${out_dir.prepare_pile10k}
