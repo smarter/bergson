@@ -569,7 +569,25 @@ class KFACTreatmentPairwise(KFACTreatment):
                     Ua = info['evc_A'].to(self.device)
                     W = info['W_orig'].to(self.device).float()
                     C = Ug.T @ W @ Ua  # [m, n]
-                    importance = (C ** 2) * importance
+                    C_sq = C ** 2
+                    # Diagnostic: show how concentrated C² is
+                    C_sq_flat = C_sq.flatten()
+                    total_C_sq = C_sq_flat.sum()
+                    sorted_C_sq = C_sq_flat.sort(descending=True).values
+                    cumsum_C_sq = sorted_C_sq.cumsum(0) / total_C_sq
+                    top1pct = (cumsum_C_sq <= 0.01).sum().item()
+                    top10pct = (cumsum_C_sq <= 0.10).sum().item()
+                    top40pct = (cumsum_C_sq <= 0.40).sum().item()
+                    print(f"  C² concentration: top {top1pct} pairs (of {C_sq_flat.numel()}) = 1% mass, "
+                          f"top {top10pct} = 10%, top {top40pct} = 40%")
+                    importance = C_sq * importance
+                    # Also show concentration of final importance
+                    imp_flat = importance.flatten()
+                    total_imp = imp_flat.sum()
+                    sorted_imp = imp_flat.sort(descending=True).values
+                    cumsum_imp = sorted_imp.cumsum(0) / total_imp
+                    imp_top40pct = (cumsum_imp <= 0.40).sum().item()
+                    print(f"  C²×Λ concentration: top {imp_top40pct} pairs = 40% mass")
                     print(f"  Using weight coefficients for pair selection")
 
                 # Step 3: Select pairs
