@@ -2,4 +2,4 @@
 benchmark:
   args:
     task: "gsm8k::olmes"
-    batch-size: 32
+    batch-size: 28
