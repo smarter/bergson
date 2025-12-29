@@ -583,11 +583,18 @@ class KFACTreatmentPairwise(KFACTreatment):
                     importance = C_sq * importance
                     # Also show concentration of final importance
                     imp_flat = importance.flatten()
+                    n_pairs = imp_flat.numel()
                     total_imp = imp_flat.sum()
                     sorted_imp = imp_flat.sort(descending=True).values
                     cumsum_imp = sorted_imp.cumsum(0) / total_imp
-                    imp_top40pct = (cumsum_imp <= 0.40).sum().item()
-                    print(f"  C²×Λ concentration: top {imp_top40pct} pairs = 40% mass")
+                    # What mass % do we get at 5%, 10%, and 15% of pairs?
+                    idx_5pct = int(n_pairs * 0.05)
+                    idx_10pct = int(n_pairs * 0.10)
+                    idx_15pct = int(n_pairs * 0.15)
+                    mass_at_5pct = cumsum_imp[idx_5pct - 1].item() if idx_5pct > 0 else 0
+                    mass_at_10pct = cumsum_imp[idx_10pct - 1].item() if idx_10pct > 0 else 0
+                    mass_at_15pct = cumsum_imp[idx_15pct - 1].item() if idx_15pct > 0 else 0
+                    print(f"  C²×Λ: 5% pairs = {mass_at_5pct:.1%}, 10% = {mass_at_10pct:.1%}, 15% = {mass_at_15pct:.1%}")
                     print(f"  Using weight coefficients for pair selection")
 
                 # Step 3: Select pairs
