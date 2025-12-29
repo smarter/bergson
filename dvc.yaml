@@ -141,7 +141,7 @@ stages:
 
   benchmark:
     cmd: >-
-      uvx --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${olmes_commit}"
+      uvx --python 3.11 --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${olmes_commit}"
       olmes
       --model ${out_dir.eval_kfac}/model
       ${benchmark.args}
