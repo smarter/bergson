@@ -524,14 +524,19 @@ class KFACTreatmentPairwise(KFACTreatment):
 
     def apply_kfac_by_product(self,
                               variance_ratio: Union[float,
-                                                    Dict[str, float]]):
+                                                    Dict[str, float]],
+                              use_weight_coefficients: bool = False):
         """
         Project each registered layer onto the span of the largest
-        λ_i μ_j products until the chosen fraction of total mass is kept.
+        importance scores until the chosen fraction of total mass is kept.
 
         variance_ratio
             • single float → same ratio for every layer, or
             • dict[layer_name] = ratio
+        use_weight_coefficients
+            If True, weight importance by C_ij^2 (squared weight coefficients
+            in the eigenbasis). This minimizes second-order loss impact rather
+            than just curvature.
         """
         # Build a per‑layer ratio map
         if isinstance(variance_ratio, float):
@@ -549,20 +554,36 @@ class KFACTreatmentPairwise(KFACTreatment):
                 assert (eva_G[:-1] >= eva_G[1:]).all(), "eva_G must be sorted desc"
                 assert (eva_A[:-1] >= eva_A[1:]).all(), "eva_A must be sorted desc"
 
-                # Step 1: which (i,j) pairs?
+                # Step 1: Compute base importance (curvature estimate)
                 if 'lambda_correction' in info:
                     # Use eigenvalue corrections (EK-FAC)
-                    lambda_corr = info['lambda_correction'].to(self.device)
-                    pairs = self._top_pairs_by_correction(lambda_corr, rho)
+                    importance = info['lambda_correction'].to(self.device)
                     print(f"  Using eigenvalue corrections for pair selection")
                 else:
-                    # Use product of eigenvalues (standard K-FAC)
+                    # Outer product of eigenvalues (standard K-FAC)
+                    importance = eva_G.unsqueeze(1) * eva_A.unsqueeze(0)  # [m, n]
+
+                # Step 2: Apply weight coefficient weighting if requested
+                if use_weight_coefficients:
+                    Ug = info['evc_G'].to(self.device)
+                    Ua = info['evc_A'].to(self.device)
+                    W = info['W_orig'].to(self.device).float()
+                    C = Ug.T @ W @ Ua  # [m, n]
+                    importance = (C ** 2) * importance
+                    print(f"  Using weight coefficients for pair selection")
+
+                # Step 3: Select pairs
+                if use_weight_coefficients or 'lambda_correction' in info:
+                    # Non-separable: use general flatten-sort selection
+                    pairs = self._top_pairs_by_correction(importance, rho)
+                else:
+                    # Separable: use efficient heap-based selection
                     pairs = self._top_pairs_by_product(eva_G, eva_A, rho)
 
-                # Step 2: build projection
+                # Step 4: build projection
                 W_proj = self._project_weight_pairs(info, pairs)
 
-                # Step 3: write back
+                # Step 5: write back
                 layer = self._get_layer_by_name(layer_name)
                 layer.weight.copy_(W_proj.to(layer.weight.dtype))
 

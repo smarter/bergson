@@ -324,7 +324,8 @@ def apply_kfac_to_layer(model,
                        bergson_path: Optional[str] = None,
                        use_cache: bool = True,
                        refresh_cache: bool = False,
-                       use_eigenvalue_corrections: bool = False) -> None:
+                       use_eigenvalue_corrections: bool = False,
+                       use_weight_coefficients: bool = False) -> None:
     """Apply K-FAC to a single layer's MLP projections.
 
     Args:
@@ -337,6 +338,7 @@ def apply_kfac_to_layer(model,
         use_cache: Whether to use cached weights
         refresh_cache: Whether to recompute cached weights
         use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
+        use_weight_coefficients: Whether to weight pair importance by C_ij^2 (squared weight coefficients)
     """
     if bergson_path is None and model_size is None:
         raise ValueError("Either model_size or bergson_path must be provided")
@@ -355,7 +357,10 @@ def apply_kfac_to_layer(model,
 
         cache_path = CACHE_DIR / (
             f"{_sanitize_filename_component(model_name)}__L{layer_idx}__{proj_name}"
-            f"__rho{_rho_to_str(variance)}__{proj_layer.weight.dtype.__str__()}.pt"
+            f"__rho{_rho_to_str(variance)}"
+            f"{'__evcorr' if use_eigenvalue_corrections else ''}"
+            f"{'__wcoef' if use_weight_coefficients else ''}"
+            f"__{proj_layer.weight.dtype.__str__()}.pt"
         )
 
         # Check cache
@@ -391,7 +396,8 @@ def apply_kfac_to_layer(model,
                 device=proj_layer.weight.device,
             )
 
-        kfac.apply_kfac_by_product(variance_ratio=variance)
+        kfac.apply_kfac_by_product(variance_ratio=variance,
+                                   use_weight_coefficients=use_weight_coefficients)
 
         stats = kfac.compression_stats.get(layer_name, None)
         if stats is not None:
@@ -436,6 +442,9 @@ def main():
     parser.add_argument("--eigenvalue-corrections", action="store_true",
                        help="Use pre-computed eigenvalue corrections from bergson format. "
                             "Only supported with --bergson-factors.")
+    parser.add_argument("--weight-coefficients", action="store_true",
+                       help="Weight pair importance by C_ij^2 (squared weight coefficients). "
+                            "Minimizes second-order loss impact rather than just curvature.")
 
     # Evaluation settings
     parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
@@ -574,6 +583,7 @@ def main():
                 use_cache=args.use_cache,
                 refresh_cache=args.refresh_cache,
                 use_eigenvalue_corrections=args.eigenvalue_corrections,
+                use_weight_coefficients=args.weight_coefficients,
             )
 
     # POST-K-FAC EVALUATION

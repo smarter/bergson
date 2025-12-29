@@ -23,6 +23,7 @@ collect_kfac:
     batch_size: ${scale_for_dtype:${..bf16_batch_size},${.dtype}}
 
 eval_kfac:
+  use_weight_coefficients: false
   args:
     layers-json: ${json:${model_method.layers}}
 
@@ -42,6 +43,7 @@ computed:
   # Flags that cannot be represented as "key: value" because they don't have a
   # value (dvc expands "key: null" as "--key None").
   eigenvalue_corrections_flag: "${if:${eval_kfac.use_eigenvalue_corrections},'--eigenvalue-corrections',''}"
+  weight_coefficients_flag: "${if:${eval_kfac.use_weight_coefficients},'--weight-coefficients',''}"
   sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
   fsdp_flag: "${if:${collect_kfac.fsdp},'--fsdp',''}"
   world_size_flag: "${if_set:${collect_kfac.world_size},'--world_size'}"

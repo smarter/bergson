@@ -86,6 +86,7 @@ stages:
       --skip-baseline
       ${eval_kfac.args}
       ${computed.eigenvalue_corrections_flag}
+      ${computed.weight_coefficients_flag}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
       - ${out_dir.collect_kfac}
