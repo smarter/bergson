@@ -83,12 +83,24 @@ KFAC_FACTORS_7B = {
 }
 
 
-def get_kfac_factors_path(model_size: str, layer_idx: int) -> str:
-    """Get K-FAC factors path for given model size and layer."""
+def get_kfac_factors_path(model_size: str, layer_idx: int, factors_root: Optional[Path] = None) -> str:
+    """Get K-FAC factors path for given model size and layer.
+
+    Args:
+        model_size: "1b" or "7b"
+        layer_idx: Layer index to find factors for
+        factors_root: If provided, look for kfac_factors_blk_*.pt directly in this directory
+                      (DVC output format). Otherwise use DEFAULT_FACTORS_ROOT with legacy paths.
+    """
     factors = KFAC_FACTORS_1B if model_size == "1b" else KFAC_FACTORS_7B
     for layers, rel_path in factors.items():
         if layer_idx in layers:
-            return str((DEFAULT_FACTORS_ROOT / rel_path).resolve())
+            if factors_root is not None:
+                # DVC output format: factors directly in the root directory
+                return str((factors_root / rel_path.name).resolve())
+            else:
+                # Legacy format with olmo2_* subdirectory
+                return str((DEFAULT_FACTORS_ROOT / rel_path).resolve())
     raise ValueError(f"No K-FAC factors for layer {layer_idx} in {model_size} model")
 
 
@@ -322,6 +334,7 @@ def apply_kfac_to_layer(model,
                        variance_down: float,
                        model_size: Optional[str] = None,
                        bergson_path: Optional[str] = None,
+                       goodfire_path: Optional[str] = None,
                        use_cache: bool = True,
                        refresh_cache: bool = False,
                        use_eigenvalue_corrections: bool = False,
@@ -334,7 +347,8 @@ def apply_kfac_to_layer(model,
         model_name: Model name (for cache key)
         variance_gate/up/down: Variance ratios for each projection
         model_size: Model size for looking up pre-converted factors (mutually exclusive with bergson_path)
-        bergson_path: Path to bergson output directory (mutually exclusive with model_size)
+        bergson_path: Path to bergson output directory (mutually exclusive with model_size/goodfire_path)
+        goodfire_path: Path to goodfire output directory with kfac_factors_blk_*.pt files
         use_cache: Whether to use cached weights
         refresh_cache: Whether to recompute cached weights
         use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
@@ -388,7 +402,8 @@ def apply_kfac_to_layer(model,
                 device=proj_layer.weight.device,
             )
         else:
-            factors_path = get_kfac_factors_path(model_size, layer_idx)
+            factors_root = Path(goodfire_path) if goodfire_path else None
+            factors_path = get_kfac_factors_path(model_size, layer_idx, factors_root=factors_root)
             kfac = KFACTreatmentPairwise(
                 model,
                 layer_names=[layer_name],
@@ -439,6 +454,9 @@ def main():
                        help="Path to bergson output directory. If set, reads factors directly from "
                             "bergson format (with pre-computed eigenvectors) instead of using "
                             "pre-converted .pt files.")
+    parser.add_argument("--goodfire-factors", type=str, default="",
+                       help="Path to goodfire output directory containing kfac_factors_blk_*.pt files. "
+                            "Mutually exclusive with --bergson-factors.")
     parser.add_argument("--eigenvalue-corrections", action="store_true",
                        help="Use pre-computed eigenvalue corrections from bergson format. "
                             "Only supported with --bergson-factors.")
@@ -466,6 +484,8 @@ def main():
     args = parser.parse_args()
 
     # Validate argument combinations
+    if args.bergson_factors and args.goodfire_factors:
+        parser.error("--bergson-factors and --goodfire-factors are mutually exclusive")
     if args.eigenvalue_corrections and not args.bergson_factors:
         parser.error("--eigenvalue-corrections requires --bergson-factors")
 
@@ -580,6 +600,7 @@ def main():
                 variance_down=variances["down"],
                 model_size=args.model_size if not args.bergson_factors else None,
                 bergson_path=args.bergson_factors or None,
+                goodfire_path=args.goodfire_factors or None,
                 use_cache=args.use_cache,
                 refresh_cache=args.refresh_cache,
                 use_eigenvalue_corrections=args.eigenvalue_corrections,

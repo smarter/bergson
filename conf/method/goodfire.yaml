@@ -9,3 +9,5 @@ collect_kfac:
 
 eval_kfac:
   use_eigenvalue_corrections: false
+  args:
+    goodfire-factors: ${out_dir.collect_kfac}
