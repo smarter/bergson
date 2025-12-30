@@ -1,9 +1,22 @@
 model:
   name: allenai/OLMo-2-1124-7B
   size: 7b
-collect_kfac:
+eval_kfac:
   args:
-    batch_size: 24
+    bs: 96
+    bergson-factors: out/collect_kfac/bergson/7b
+    layers-json: '{"23": {"gate": 0.6, "up": 0.6, "down": 1.0}, "24": {"gate": 0.6,
+      "up": 0.6, "down": 1.0}, "25": {"gate": 0.6, "up": 0.6, "down": 1.0}}'
+  use_eigenvalue_corrections: false
+method:
+  name: bergson
+collect_kfac:
+  script: memorization_kfac/data/collect_kfac_bergson.py
+  fsdp: true
+  world_size: 8
+  bf16_batch_size: 13
+  sample_labels: true
+  args:
     device: cuda
     dtype: bfloat16
     corpus: dolmo
@@ -14,19 +27,7 @@ collect_kfac:
     - '24'
     - '25'
     layers_per_pass: 3
-  script: memorization_kfac/data/collect_kfac_bergson.py
-  fsdp: true
-  world_size: 8
-  sample_labels: true
-eval_kfac:
-  args:
-    bs: 96
-    bergson-factors: out/collect_kfac/bergson/7b
-    layers-json: '{"23": {"gate": 0.4, "up": 0.4, "down": 1.0}, "24": {"gate": 0.4,
-      "up": 0.4, "down": 1.0}, "25": {"gate": 0.4, "up": 0.4, "down": 1.0}}'
-  use_eigenvalue_corrections: true
-method:
-  name: bergson
+    batch_size: 13
 benchmark:
   args:
     task: gsm8k::olmes
@@ -34,16 +35,16 @@ benchmark:
 model_method:
   layers:
     '23':
-      gate: 0.4
-      up: 0.4
+      gate: 0.6
+      up: 0.6
       down: 1.0
     '24':
-      gate: 0.4
-      up: 0.4
+      gate: 0.6
+      up: 0.6
       down: 1.0
     '25':
-      gate: 0.4
-      up: 0.4
+      gate: 0.6
+      up: 0.6
       down: 1.0
 out_suffix: bergson/7b
 out_dir:
@@ -54,7 +55,7 @@ out_dir:
   plot_figure2: out/plot_figure2/bergson/7b
   benchmark: out/benchmark/bergson/7b
 computed:
-  eigenvalue_corrections_flag: --eigenvalue-corrections
+  eigenvalue_corrections_flag: ''
   sample_labels_flag: --sample_labels
   fsdp_flag: --fsdp
   world_size_flag: --world_size 8

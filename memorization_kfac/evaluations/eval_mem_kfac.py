@@ -246,7 +246,7 @@ def load_bergson_kfac_info(
         bergson_key = layer_name.removeprefix("model.")
 
         if bergson_key not in act_eigen:
-            raise ValueError(f"Eigenvectors not found for {bergson_key} in bergson factors")
+            raise ValueError(f"Eigenvectors not found for {bergson_key} in bergson factors ${act_eigen}")
 
         # Get original weight
         parts = layer_name.split('.')
