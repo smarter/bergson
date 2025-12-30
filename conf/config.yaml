@@ -25,6 +25,7 @@ collect_kfac:
 eval_kfac:
   use_weight_coefficients: false
   use_random: false
+  use_random_preserve_mass: false
   args:
     layers-json: ${json:${model_method.layers}}
 
@@ -46,6 +47,7 @@ computed:
   eigenvalue_corrections_flag: "${if:${eval_kfac.use_eigenvalue_corrections},'--eigenvalue-corrections',''}"
   weight_coefficients_flag: "${if:${eval_kfac.use_weight_coefficients},'--weight-coefficients',''}"
   random_flag: "${if:${eval_kfac.use_random},'--random',''}"
+  random_preserve_mass_flag: "${if:${eval_kfac.use_random_preserve_mass},'--random-preserve-mass',''}"
   sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
   fsdp_flag: "${if:${collect_kfac.fsdp},'--fsdp',''}"
   world_size_flag: "${if_set:${collect_kfac.world_size},'--world_size'}"

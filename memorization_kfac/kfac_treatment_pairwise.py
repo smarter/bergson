@@ -400,6 +400,49 @@ class KFACTreatmentPairwise(KFACTreatment):
         return selected
 
     @staticmethod
+    def _select_pairs_by_mass(importance: torch.Tensor,
+                              ratio: float,
+                              random: bool = False) -> Tuple[List[Tuple[int, int]], float]:
+        """
+        Select pairs until cumulative mass >= ratio * total.
+
+        Args:
+            importance: [m, n] matrix of pair importance values
+            ratio: target fraction of total mass to retain
+            random: if False, select by descending importance; if True, select randomly
+
+        Returns:
+            pairs: list of (i, j) tuples
+            achieved_mass_ratio: actual mass fraction achieved
+        """
+        n = importance.shape[1]
+        flat = importance.flatten()
+
+        if random:
+            ordered_indices = torch.randperm(flat.numel(), device=importance.device)
+            ordered_vals = flat[ordered_indices]
+        else:
+            # Sort in descending order
+            ordered_vals, ordered_indices = torch.sort(flat, descending=True)
+
+        # Use float64 for cumsum to avoid precision loss with millions of elements
+        ordered_vals_f64 = ordered_vals.double()
+        total_mass = ordered_vals_f64.sum().item()
+        target_mass = ratio * total_mass
+
+        # Find cutoff using cumsum + binary search
+        cumsum = torch.cumsum(ordered_vals_f64, dim=0)
+        k = min(torch.searchsorted(cumsum, target_mass).item() + 1, len(ordered_indices))
+
+        # Convert flat indices to (i, j) pairs (vectorized)
+        selected_flat = ordered_indices[:k]
+        rows = (selected_flat // n).tolist()
+        cols = (selected_flat % n).tolist()
+
+        achieved_mass_ratio = cumsum[k - 1].item() / total_mass if k > 0 else 0.0
+        return list(zip(rows, cols)), achieved_mass_ratio
+
+    @staticmethod
     def _top_pairs_by_correction(lambda_correction: torch.Tensor,
                                   ratio: float) -> List[Tuple[int, int]]:
         """
@@ -409,27 +452,16 @@ class KFACTreatmentPairwise(KFACTreatment):
         λ_i * μ_j, this method handles the full correction matrix by sorting
         all entries and selecting until cumulative mass >= ratio * total.
         """
-        n = lambda_correction.shape[1]
-        flat = lambda_correction.flatten()
+        pairs, _ = KFACTreatmentPairwise._select_pairs_by_mass(lambda_correction, ratio, random=False)
+        return pairs
 
-        # Sort in descending order
-        sorted_vals, sorted_indices = torch.sort(flat, descending=True)
-
-        # Use float64 for cumsum to avoid precision loss with millions of elements
-        sorted_vals_f64 = sorted_vals.double()
-        total_mass = sorted_vals_f64.sum().item()
-        target_mass = ratio * total_mass
-
-        # Find cutoff using cumsum + binary search
-        cumsum = torch.cumsum(sorted_vals_f64, dim=0)
-        k = min(torch.searchsorted(cumsum, target_mass).item() + 1, len(sorted_indices))
-
-        # Convert flat indices to (i, j) pairs (vectorized)
-        selected_flat = sorted_indices[:k]
-        rows = (selected_flat // n).tolist()
-        cols = (selected_flat % n).tolist()
-
-        return list(zip(rows, cols))
+    @staticmethod
+    def _select_random_pairs(shape: Tuple[int, int], k: int, device) -> List[Tuple[int, int]]:
+        """Select k random pairs from an (m, n) matrix."""
+        m, n = shape
+        perm = torch.randperm(m * n, device=device)
+        selected = perm[:k]
+        return list(zip((selected // n).tolist(), (selected % n).tolist()))
 
     def _project_weight_pairs(self,
                               info: Dict,
@@ -526,7 +558,8 @@ class KFACTreatmentPairwise(KFACTreatment):
                               variance_ratio: Union[float,
                                                     Dict[str, float]],
                               use_weight_coefficients: bool = False,
-                              use_random: bool = False):
+                              use_random: bool = False,
+                              use_random_preserve_mass: bool = False):
         """
         Project each registered layer onto the span of the largest
         importance scores until the chosen fraction of total mass is kept.
@@ -540,6 +573,10 @@ class KFACTreatmentPairwise(KFACTreatment):
             than just curvature.
         use_random
             If True, select pairs randomly instead of by importance (baseline).
+            Matches pair count from configured method.
+        use_random_preserve_mass
+            If True, select pairs randomly until target mass ratio is reached.
+            Preserves total importance mass but with random selection order.
         """
         # Build a per‑layer ratio map
         if isinstance(variance_ratio, float):
@@ -551,6 +588,7 @@ class KFACTreatmentPairwise(KFACTreatment):
             for layer_name in self.layer_names:
                 rho = ratio_map[layer_name]
                 info = self.kfac_info[layer_name]
+                print(f"  Processing {layer_name} (rho={rho:.3f})")
 
                 eva_G = info['eva_G'].to(self.device)
                 eva_A = info['eva_A'].to(self.device)
@@ -558,16 +596,20 @@ class KFACTreatmentPairwise(KFACTreatment):
                 assert (eva_A[:-1] >= eva_A[1:]).all(), "eva_A must be sorted desc"
 
                 # Step 1: Compute base importance (curvature estimate)
+                print(f"  Step 1: Computing base importance...")
                 if 'lambda_correction' in info:
                     # Use eigenvalue corrections (EK-FAC)
                     importance = info['lambda_correction'].to(self.device)
-                    print(f"  Using eigenvalue corrections for pair selection")
+                    print(f"    Using eigenvalue corrections (EK-FAC)")
                 else:
                     # Outer product of eigenvalues (standard K-FAC)
                     importance = eva_G.unsqueeze(1) * eva_A.unsqueeze(0)  # [m, n]
+                    print(f"    Using outer product of eigenvalues (K-FAC)")
+                print(f"  Step 1: Done. Importance shape: {tuple(importance.shape)}")
 
                 # Step 2: Apply weight coefficient weighting if requested
                 if use_weight_coefficients:
+                    print(f"  Step 2: Applying weight coefficient weighting...")
                     Ug = info['evc_G'].to(self.device)
                     Ua = info['evc_A'].to(self.device)
                     W = info['W_orig'].to(self.device).float()
@@ -581,7 +623,7 @@ class KFACTreatmentPairwise(KFACTreatment):
                     top1pct = (cumsum_C_sq <= 0.01).sum().item()
                     top10pct = (cumsum_C_sq <= 0.10).sum().item()
                     top40pct = (cumsum_C_sq <= 0.40).sum().item()
-                    print(f"  C² concentration: top {top1pct} pairs (of {C_sq_flat.numel()}) = 1% mass, "
+                    print(f"    C² concentration: top {top1pct} pairs (of {C_sq_flat.numel()}) = 1% mass, "
                           f"top {top10pct} = 10%, top {top40pct} = 40%")
                     importance = C_sq * importance
                     # Also show concentration of final importance
@@ -597,40 +639,48 @@ class KFACTreatmentPairwise(KFACTreatment):
                     mass_at_5pct = cumsum_imp[idx_5pct - 1].item() if idx_5pct > 0 else 0
                     mass_at_10pct = cumsum_imp[idx_10pct - 1].item() if idx_10pct > 0 else 0
                     mass_at_15pct = cumsum_imp[idx_15pct - 1].item() if idx_15pct > 0 else 0
-                    print(f"  C²×Λ: 5% pairs = {mass_at_5pct:.1%}, 10% = {mass_at_10pct:.1%}, 15% = {mass_at_15pct:.1%}")
-                    print(f"  Using weight coefficients for pair selection")
+                    print(f"    C²×Λ: 5% pairs = {mass_at_5pct:.1%}, 10% = {mass_at_10pct:.1%}, 15% = {mass_at_15pct:.1%}")
+                    print(f"  Step 2: Done.")
 
                 # Step 3: Select pairs
-                if use_weight_coefficients or 'lambda_correction' in info:
+                print(f"  Step 3: Selecting pairs...")
+                if use_random_preserve_mass:
+                    # Random baseline: select pairs randomly until mass threshold reached
+                    pairs, achieved_mass = self._select_pairs_by_mass(importance, rho, random=True)
+                    print(f"    Method: random-preserve-mass")
+                    print(f"  Step 3: Done. Selected {len(pairs)} pairs ({achieved_mass:.1%} mass)")
+                elif use_weight_coefficients or 'lambda_correction' in info:
                     # Non-separable: use general flatten-sort selection
                     pairs = self._top_pairs_by_correction(importance, rho)
+                    print(f"    Method: flatten-sort (non-separable)")
+                    print(f"  Step 3: Done. Selected {len(pairs)} pairs")
                 else:
                     # Separable: use efficient heap-based selection
                     pairs = self._top_pairs_by_product(eva_G, eva_A, rho)
+                    print(f"    Method: heap-based (separable)")
+                    print(f"  Step 3: Done. Selected {len(pairs)} pairs")
 
                 # Step 3b: If random mode, replace with random selection of same count
                 if use_random:
                     n_pairs_to_select = len(pairs)
-                    m, n = importance.shape
-                    total_pairs = m * n
-                    # Random permutation of all pair indices
-                    perm = torch.randperm(total_pairs, device=importance.device)
-                    selected_indices = perm[:n_pairs_to_select]
-                    # Convert flat indices to (i, j) pairs
-                    pairs = [(int(idx // n), int(idx % n)) for idx in selected_indices]
-                    print(f"  Using random pair selection (baseline, {n_pairs_to_select} pairs)")
+                    print(f"  Step 3b: Replacing with random selection (same count)...")
+                    pairs = self._select_random_pairs(importance.shape, n_pairs_to_select, importance.device)
+                    print(f"  Step 3b: Done. Randomly selected {n_pairs_to_select} pairs")
 
                 # Step 4: build projection
+                print(f"  Step 4: Building projection...")
                 W_proj = self._project_weight_pairs(info, pairs)
+                print(f"  Step 4: Done. Projection shape: {tuple(W_proj.shape)}")
 
                 # Step 5: write back
+                print(f"  Step 5: Writing back to layer...")
                 layer = self._get_layer_by_name(layer_name)
                 layer.weight.copy_(W_proj.to(layer.weight.dtype))
+                print(f"  Step 5: Done.")
 
-                # Book‑keeping
+                # Summary
                 k = len(pairs)
-                info_str = f"{layer_name}: {k} pairs ({k/ info['W_orig'].numel():.2%})"
-                print(info_str)
+                print(f"  Summary: {layer_name}: {k} pairs ({k / info['W_orig'].numel():.2%})")
                 # Record stats for external reporting
                 rect_params = int(info.get('prefix_eig_G', 0)) * int(info.get('prefix_eig_A', 0))
                 orig_params = int(info['W_orig'].numel())

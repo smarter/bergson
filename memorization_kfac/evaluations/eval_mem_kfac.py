@@ -339,7 +339,8 @@ def apply_kfac_to_layer(model,
                        refresh_cache: bool = False,
                        use_eigenvalue_corrections: bool = False,
                        use_weight_coefficients: bool = False,
-                       use_random: bool = False) -> None:
+                       use_random: bool = False,
+                       use_random_preserve_mass: bool = False) -> None:
     """Apply K-FAC to a single layer's MLP projections.
 
     Args:
@@ -354,7 +355,8 @@ def apply_kfac_to_layer(model,
         refresh_cache: Whether to recompute cached weights
         use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
         use_weight_coefficients: Whether to weight pair importance by C_ij^2 (squared weight coefficients)
-        use_random: Whether to select pairs randomly (baseline)
+        use_random: Whether to select pairs randomly (baseline, matches pair count)
+        use_random_preserve_mass: Whether to select pairs randomly until mass ratio is reached
     """
     if bergson_path is None and model_size is None:
         raise ValueError("Either model_size or bergson_path must be provided")
@@ -377,6 +379,7 @@ def apply_kfac_to_layer(model,
             f"{'__evcorr' if use_eigenvalue_corrections else ''}"
             f"{'__wcoef' if use_weight_coefficients else ''}"
             f"{'__random' if use_random else ''}"
+            f"{'__randmass' if use_random_preserve_mass else ''}"
             f"__{proj_layer.weight.dtype.__str__()}.pt"
         )
 
@@ -416,7 +419,8 @@ def apply_kfac_to_layer(model,
 
         kfac.apply_kfac_by_product(variance_ratio=variance,
                                    use_weight_coefficients=use_weight_coefficients,
-                                   use_random=use_random)
+                                   use_random=use_random,
+                                   use_random_preserve_mass=use_random_preserve_mass)
 
         stats = kfac.compression_stats.get(layer_name, None)
         if stats is not None:
@@ -470,6 +474,9 @@ def main():
     parser.add_argument("--random", action="store_true",
                        help="Select pairs randomly instead of by importance (baseline). "
                             "Uses configured method to determine pair count, then selects randomly.")
+    parser.add_argument("--random-preserve-mass", action="store_true",
+                       help="Select pairs randomly until target mass ratio is reached (baseline). "
+                            "Preserves total importance mass but with random selection order.")
 
     # Evaluation settings
     parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
@@ -495,6 +502,8 @@ def main():
         parser.error("--bergson-factors and --goodfire-factors are mutually exclusive")
     if args.eigenvalue_corrections and not args.bergson_factors:
         parser.error("--eigenvalue-corrections requires --bergson-factors")
+    if args.random_preserve_mass and (args.random or args.weight_coefficients or args.eigenvalue_corrections):
+        parser.error("--random-preserve-mass is mutually exclusive with --random, --weight-coefficients, and --eigenvalue-corrections")
 
     # Suppress HF logging
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -613,6 +622,7 @@ def main():
                 use_eigenvalue_corrections=args.eigenvalue_corrections,
                 use_weight_coefficients=args.weight_coefficients,
                 use_random=args.random,
+                use_random_preserve_mass=args.random_preserve_mass,
             )
 
     # POST-K-FAC EVALUATION
