@@ -525,7 +525,8 @@ class KFACTreatmentPairwise(KFACTreatment):
     def apply_kfac_by_product(self,
                               variance_ratio: Union[float,
                                                     Dict[str, float]],
-                              use_weight_coefficients: bool = False):
+                              use_weight_coefficients: bool = False,
+                              use_random: bool = False):
         """
         Project each registered layer onto the span of the largest
         importance scores until the chosen fraction of total mass is kept.
@@ -537,6 +538,8 @@ class KFACTreatmentPairwise(KFACTreatment):
             If True, weight importance by C_ij^2 (squared weight coefficients
             in the eigenbasis). This minimizes second-order loss impact rather
             than just curvature.
+        use_random
+            If True, select pairs randomly instead of by importance (baseline).
         """
         # Build a per‑layer ratio map
         if isinstance(variance_ratio, float):
@@ -604,6 +607,18 @@ class KFACTreatmentPairwise(KFACTreatment):
                 else:
                     # Separable: use efficient heap-based selection
                     pairs = self._top_pairs_by_product(eva_G, eva_A, rho)
+
+                # Step 3b: If random mode, replace with random selection of same count
+                if use_random:
+                    n_pairs_to_select = len(pairs)
+                    m, n = importance.shape
+                    total_pairs = m * n
+                    # Random permutation of all pair indices
+                    perm = torch.randperm(total_pairs, device=importance.device)
+                    selected_indices = perm[:n_pairs_to_select]
+                    # Convert flat indices to (i, j) pairs
+                    pairs = [(int(idx // n), int(idx % n)) for idx in selected_indices]
+                    print(f"  Using random pair selection (baseline, {n_pairs_to_select} pairs)")
 
                 # Step 4: build projection
                 W_proj = self._project_weight_pairs(info, pairs)
