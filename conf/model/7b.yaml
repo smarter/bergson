@@ -2,6 +2,14 @@
 model:
   name: "allenai/OLMo-2-1124-7B"
   size: "7b"
+  layer_mass:
+    gate: ${model_method.gate_up_mass}
+    up: ${model_method.gate_up_mass}
+    down: 1.0
+  layers:
+    "23": ${..layer_mass}
+    "24": ${..layer_mass}
+    "25": ${..layer_mass}
 
 eval_kfac:
   args:

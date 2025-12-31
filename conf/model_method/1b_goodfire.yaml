@@ -1,8 +1,7 @@
 # @package _global_
 model_method:
-  layers:
-    # Not specified in the paper, doesn't work well as-is.
-    {"13": {"gate": 0.60, "up": 0.60, "down": 1.0}, "14": {"gate": 0.60, "up": 0.60, "down": 1.0}, "15": {"gate": 0.60, "up": 0.60, "down": 1.0}}
+  # Not specified in the paper, doesn't work well as-is.
+  gate_up_factor: 0.60
 
 collect_kfac:
   bf16_batch_size: 168

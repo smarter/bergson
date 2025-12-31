@@ -18,14 +18,14 @@ collect_kfac:
     corpus: "dolmo"
     nbytes: 100000000  # ~100MB (~20M tokens)
     seq_len: 512
-    target_blocks: ${oc.dict.keys:model_method.layers}
-    layers_per_pass: ${len:${model_method.layers}}
+    target_blocks: ${oc.dict.keys:model.layers}
+    layers_per_pass: ${len:${model.layers}}
     batch_size: ${scale_for_dtype:${..bf16_batch_size},${.dtype}}
 
 eval_kfac:
   use_weight_coefficients: false
   args:
-    layers-json: ${json:${model_method.layers}}
+    layers-json: ${json:${model.layers}}
 
 
 
