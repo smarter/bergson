@@ -51,6 +51,7 @@ stages:
       ${computed.world_size_flag}
     deps:
       - ${collect_kfac.script}
+      - ${collect_kfac.extra_dep}
     outs:
       - ${out_dir.collect_kfac}
     desc: |
@@ -89,6 +90,8 @@ stages:
       ${computed.weight_coefficients_flag}
     deps:
       - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/metrics/
+      - memorization_kfac/kfac_treatment_pairwise.py
       - ${out_dir.collect_kfac}
       - ${out_dir.prepare_pile10k}
       - ${out_dir.prepare_pile10k_cache}

@@ -4,6 +4,7 @@ method:
 
 collect_kfac:
   script: "memorization_kfac/data/collect_kfac_multilayer.py"
+  extra_dep: ${collect_kfac.script} # dvc.yaml parsing fails if we use "null" as a dependency
   fsdp: false
   world_size: null
 

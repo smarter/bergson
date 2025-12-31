@@ -169,10 +169,12 @@ def main():
     )
 
     target_modules = set()
+    # Activation checkpointing change module names
+    blk_suffix =  "._checkpoint_wrapped_module" if args.fsdp else ""
     for blk in args.target_blocks:
-        target_modules.add(f"layers.{blk}.mlp.gate_proj")
-        target_modules.add(f"layers.{blk}.mlp.up_proj")
-        target_modules.add(f"layers.{blk}.mlp.down_proj")
+        target_modules.add(f"layers.{blk}{blk_suffix}.mlp.gate_proj")
+        target_modules.add(f"layers.{blk}{blk_suffix}.mlp.up_proj")
+        target_modules.add(f"layers.{blk}{blk_suffix}.mlp.down_proj")
 
     distributed_computing(
         cfg=idx_config,
