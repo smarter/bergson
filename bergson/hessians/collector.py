@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+from jaxtyping import Float, Float32
 from safetensors.torch import load_file, save_file
 from torch import Tensor
 from torch.utils.hooks import RemovableHandle
@@ -213,9 +214,9 @@ class CovarianceCollector(HookCollectorBase):
 
     def setup(self) -> None:
         """Initialize covariance storage dictionaries."""
-        self.A_cov_dict = {}
-        self.S_cov_dict = {}
-        self.activation_cache = {}  # Cache activations for use in backward
+        self.A_cov_dict: dict[str, Float32[Tensor, "k i"]] = {}
+        self.S_cov_dict: dict[str, Float32[Tensor, "p o"]] = {}
+        self.activation_cache: dict[str, Float32[Tensor, "b i"]] = {}
 
         # Initialize sharded covariance matrices for ALL modules in target_info
         self.shard_computer._init_covariance_dict(
@@ -223,7 +224,7 @@ class CovarianceCollector(HookCollectorBase):
             gradient_covariance_dict=self.S_cov_dict,
         )
 
-    def forward_hook(self, name: str, a: Tensor) -> None:
+    def forward_hook(self, name: str, a: Float[Tensor, "n s i"]) -> None:
         """Save activations for computing covariance in backward pass."""
         # a: [N, S, I], valid_masks: [N, S]
         # Save valid activations for use in backward_hook
@@ -232,7 +233,7 @@ class CovarianceCollector(HookCollectorBase):
         # Convert to float32 to match original implementation and avoid bfloat16 numerical issues
         self.activation_cache[name] = a_bi.float()
 
-    def backward_hook(self, name: str, g: Tensor) -> None:
+    def backward_hook(self, name: str, g: Float[Tensor, "n s o"]) -> None:
         """Compute both activation and gradient covariances using cached activations."""
         # Retrieve cached activations
         a_bi = self.activation_cache.get(name)
@@ -308,13 +309,13 @@ class LambdaCollector(HookCollectorBase):
         device = get_device(self.rank)
 
         # Load precomputed eigenvectors
-        self.eigen_a = load_file(
+        self.eigen_a: dict[str, Float32[Tensor, "c b"]] = load_file(
             os.path.join(
                 self.path, f"activation_eigen_sharded/shard_{self.rank}.safetensors"
             ),
             device=device,
         )
-        self.eigen_g = load_file(
+        self.eigen_g: dict[str, Float32[Tensor, "c b"]] = load_file(
             os.path.join(
                 self.path, f"gradient_eigen_sharded/shard_{self.rank}.safetensors"
             ),
@@ -322,10 +323,10 @@ class LambdaCollector(HookCollectorBase):
         )
 
         # Initialize accumulators
-        self.eigenvalue_corrections = {}
-        self.transformed_a_cache = {}
+        self.eigenvalue_corrections: dict[str, Float32[Tensor, "o i"]] = {}
+        self.transformed_a_cache: dict[str, Float32[Tensor, "n s i"]] = {}
 
-    def forward_hook(self, name: str, a: Tensor) -> None:
+    def forward_hook(self, name: str, a: Float[Tensor, "n s i"]) -> None:
         """Transform activations using eigenvectors and cache."""
         # a shape: [N, S, I]
 
@@ -337,7 +338,7 @@ class LambdaCollector(HookCollectorBase):
         # Cache for use in backward pass
         self.transformed_a_cache[name] = transformed
 
-    def backward_hook(self, name: str, g: Tensor) -> None:
+    def backward_hook(self, name: str, g: Float[Tensor, "n s o"]) -> None:
         """Transform gradients and compute eigenvalue corrections."""
         # g shape: [N, S, O]
 

@@ -12,6 +12,7 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 from datasets import Dataset
+from jaxtyping import Float, Float32
 from safetensors.torch import load_file, save_file
 from torch import Tensor
 from torch.profiler import (
@@ -310,11 +311,11 @@ class EkfacApplicator:
 
     def prepare_attribution(self):
         self.logger.info("Preparing EKFAC factors for attribution...")
-        eigen_a = load_file(
+        eigen_a: dict[str, Float32[Tensor, "c b"]] = load_file(
             self.path + f"/activation_eigen_sharded/shard_{self.rank}.safetensors",
             device=f"cuda:{self.rank}",
         )
-        eigen_g = load_file(
+        eigen_g: dict[str, Float32[Tensor, "c b"]] = load_file(
             self.path + f"/gradient_eigen_sharded/shard_{self.rank}.safetensors",
             device=f"cuda:{self.rank}",
         )
@@ -403,36 +404,29 @@ class EkfacApplicator:
         self.logger.info("-*-" * 50)
 
     def compute_ivhp_sharded(self):
-        eigen_a = load_file(
+        eigen_a: dict[str, Float32[Tensor, "c b"]] = load_file(
             self.path + f"/activation_eigen_sharded/shard_{self.rank}.safetensors",
             device=f"cuda:{self.rank}",
         )
-        eigen_g = load_file(
+        eigen_g: dict[str, Float32[Tensor, "c b"]] = load_file(
             self.path + f"/gradient_eigen_sharded/shard_{self.rank}.safetensors",
             device=f"cuda:{self.rank}",
         )
 
-        random_eigen_a = load_file(
+        random_eigen_a: dict[str, Float32[Tensor, "c b"]] = load_file(
             self.path
             + f"/random_activation_eigen_sharded/shard_{self.rank}.safetensors",
             device=f"cuda:{self.rank}",
         )
-        random_eigen_g = load_file(
+        random_eigen_g: dict[str, Float32[Tensor, "c b"]] = load_file(
             self.path + f"/random_gradient_eigen_sharded/shard_{self.rank}.safetensors",
             device=f"cuda:{self.rank}",
         )
 
-        lambda_factor = load_file(
+        lambda_factor: dict[str, Float32[Tensor, "o i"]] = load_file(
             self.path + f"/eigenvalue_correction_sharded/shard_{self.rank}.safetensors",
             device=f"cuda:{self.rank}",
         )
-
-        for k, v in lambda_factor.items():
-            eigen_a[k] = eigen_a[k].to(dtype=torch.float32)
-            eigen_g[k] = eigen_g[k].to(dtype=torch.float32)
-            random_eigen_a[k] = random_eigen_a[k].to(dtype=torch.float32)
-            random_eigen_g[k] = random_eigen_g[k].to(dtype=torch.float32)
-            lambda_factor[k] = v.to(dtype=torch.float32)
 
         grad_sizes = {
             name: random_eigen_g[name].shape[0]
@@ -493,15 +487,15 @@ class EkfacApplicator:
 
     def compute_ivhp_batch(
         self,
-        eigen_a,
+        eigen_a: dict[str, Float32[Tensor, "c b"]],
         mmap,
-        eigen_g,
-        lambda_factor,
-        random_eigen_a,
-        random_eigen_g,
+        eigen_g: dict[str, Float32[Tensor, "c b"]],
+        lambda_factor: dict[str, Float32[Tensor, "o i"]],
+        random_eigen_a: dict[str, Float32[Tensor, "c b"]],
+        random_eigen_g: dict[str, Float32[Tensor, "c b"]],
         batch_slice,
-    ):
-        transformed_gradients: dict[str, Tensor] = {}
+    ) -> dict[str, Float32[Tensor, "n o i"]]:
+        transformed_gradients: dict[str, Float32[Tensor, "n o i"]] = {}
         for k, v in eigen_a.items():
             gradients_noi = torch.from_numpy(mmap[k][batch_slice]).to(
                 device=self.device, dtype=torch.float32
