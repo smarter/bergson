@@ -33,7 +33,7 @@ collect_kfac:
   extra_dep: bergson/
   fsdp: true
   world_size: 8
-  bf16_batch_size: 32
+  bf16_batch_size: 40
   sample_labels: true
   args:
     device: cuda
@@ -46,7 +46,7 @@ collect_kfac:
     - '24'
     - '25'
     layers_per_pass: 3
-    batch_size: 32
+    batch_size: 40
 benchmark:
   args:
     task: gsm8k::olmes
