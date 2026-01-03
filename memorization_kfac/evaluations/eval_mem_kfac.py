@@ -195,6 +195,17 @@ def _load_bergson_sharded(path: Path) -> Dict[str, torch.Tensor]:
     return result
 
 
+def _normalize_bergson_keys(data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    """Normalize bergson keys by removing checkpoint wrapper module names.
+
+    Gradient checkpointing wraps modules, causing names like:
+        layers.23._checkpoint_wrapped_module.mlp.up_proj
+    This normalizes them to:
+        layers.23.mlp.up_proj
+    """
+    return {k.replace("._checkpoint_wrapped_module.", "."): v for k, v in data.items()}
+
+
 def load_bergson_kfac_info(
     bergson_path: str,
     layer_names: List[str],
@@ -224,13 +235,13 @@ def load_bergson_kfac_info(
     influence_path = bergson_path / "influence_results"
     device = device or next(model.parameters()).device
 
-    # Load eigenvectors
-    act_eigen = _load_bergson_sharded(influence_path / "activation_eigen_sharded")
-    grad_eigen = _load_bergson_sharded(influence_path / "gradient_eigen_sharded")
+    # Load eigenvectors (normalize keys to handle gradient checkpointing)
+    act_eigen = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "activation_eigen_sharded"))
+    grad_eigen = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "gradient_eigen_sharded"))
 
     # Load covariances to compute eigenvalues
-    act_cov = _load_bergson_sharded(influence_path / "activation_covariance_sharded")
-    grad_cov = _load_bergson_sharded(influence_path / "gradient_covariance_sharded")
+    act_cov = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "activation_covariance_sharded"))
+    grad_cov = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "gradient_covariance_sharded"))
 
     # Load total_processed for normalization
     total_processed_path = influence_path / "total_processed_covariances.pt"
@@ -243,7 +254,7 @@ def load_bergson_kfac_info(
         lambda_path = influence_path / "eigenvalue_correction_sharded"
         if not lambda_path.exists():
             raise FileNotFoundError(f"Eigenvalue corrections not found at {lambda_path}")
-        lambda_corrections = _load_bergson_sharded(lambda_path)
+        lambda_corrections = _normalize_bergson_keys(_load_bergson_sharded(lambda_path))
         # Load normalization constant for eigenvalue corrections
         lambda_total_path = influence_path / "total_processed_lambda_correction.pt"
         if not lambda_total_path.exists():
