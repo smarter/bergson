@@ -2,28 +2,28 @@ model:
   name: allenai/OLMo-2-1124-7B
   size: 7b
   layer_mass:
-    gate: 0.4
-    up: 0.4
+    gate: 0.45
+    up: 0.45
     down: 1.0
   layers:
     '23':
-      gate: 0.4
-      up: 0.4
+      gate: 0.45
+      up: 0.45
       down: 1.0
     '24':
-      gate: 0.4
-      up: 0.4
+      gate: 0.45
+      up: 0.45
       down: 1.0
     '25':
-      gate: 0.4
-      up: 0.4
+      gate: 0.45
+      up: 0.45
       down: 1.0
 eval_kfac:
   args:
     bs: 96
     bergson-factors: out/collect_kfac/bergson/7b
-    layers-json: '{"23": {"gate": 0.4, "up": 0.4, "down": 1.0}, "24": {"gate": 0.4,
-      "up": 0.4, "down": 1.0}, "25": {"gate": 0.4, "up": 0.4, "down": 1.0}}'
+    layers-json: '{"23": {"gate": 0.45, "up": 0.45, "down": 1.0}, "24": {"gate": 0.45,
+      "up": 0.45, "down": 1.0}, "25": {"gate": 0.45, "up": 0.45, "down": 1.0}}'
   use_eigenvalue_corrections: true
   use_weight_coefficients: false
 method:
@@ -33,7 +33,7 @@ collect_kfac:
   extra_dep: bergson/
   fsdp: true
   world_size: 8
-  bf16_batch_size: 32
+  bf16_batch_size: 40
   sample_labels: true
   args:
     device: cuda
@@ -46,13 +46,13 @@ collect_kfac:
     - '24'
     - '25'
     layers_per_pass: 3
-    batch_size: 32
+    batch_size: 40
 benchmark:
   args:
-    task: gsm8k::olmes
-    batch-size: 28
+    task: winogrande::olmes
+    batch-size: 128
 model_method:
-  gate_up_mass: 0.4
+  gate_up_mass: 0.45
 out_suffix: bergson/7b
 out_dir:
   prepare_pile10k: memorization_kfac/data/pile10k_None.txt
