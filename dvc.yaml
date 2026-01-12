@@ -65,6 +65,52 @@ stages:
         dvc exp run collect_kfac -S model=7b -S method=bergson
 
   # =============================================================================
+  # Baseline Prediction Cache (for nDCG evaluation)
+  # =============================================================================
+  # Generates baseline top-k predictions from the unmodified model.
+  # This must be computed BEFORE any model edits to ensure correct nDCG scores.
+  #
+  # Usage:
+  #   dvc exp run baseline_cache -S model=7b
+
+  baseline_cache:
+    cmd: >-
+      MEM_KFAC_CACHE_DIR=${out_dir.baseline_cache}/cache
+      MEM_EVAL_PT_CACHE=${out_dir.prepare_pile10k_cache}
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size ${model.size}
+      --results-tag baseline_${model.size}
+      --results-dir metrics_${out_dir.baseline_cache}
+      --only-baseline
+      --baseline ${out_dir.baseline_cache}
+      --perplexity
+      --bs ${eval_kfac.args.bs}
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/metrics/
+      - memorization_kfac/data/baseline_generator.py
+      - ${out_dir.prepare_pile10k}
+      - ${out_dir.prepare_pile10k_cache}
+    outs:
+      - ${out_dir.baseline_cache}
+    metrics:
+      - metrics_${out_dir.baseline_cache}/baseline_eval_log_${model.size}_baseline_${model.size}.jsonl
+    desc: |
+      Evaluate baseline metrics on the unmodified model.
+
+      This generates:
+      - Memorization metrics (Dolma & Quotes datasets)
+      - Perplexity (Pile 10k)
+      - nDCG@10 baseline predictions cache
+
+      The baseline cache is used for nDCG evaluation to compare edited models
+      against the original model's predictions. Must be run before
+      applying any K-FAC edits to ensure accurate comparison.
+
+      Usage:
+        dvc exp run baseline_cache -S model=7b
+
+  # =============================================================================
   # K-FAC Weight Editing & Evaluation
   # =============================================================================
   # Unified task for applying K-FAC edits and evaluating memorization.
@@ -85,6 +131,7 @@ stages:
       --results-dir metrics_${out_dir.eval_kfac}
       --use-cache --refresh-cache --perplexity
       --skip-baseline
+      --baseline ${out_dir.baseline_cache}
       ${eval_kfac.args}
       ${computed.eigenvalue_corrections_flag}
       ${computed.weight_coefficients_flag}
@@ -95,6 +142,7 @@ stages:
       - ${out_dir.collect_kfac}
       - ${out_dir.prepare_pile10k}
       - ${out_dir.prepare_pile10k_cache}
+      - ${out_dir.baseline_cache}
     outs:
       - ${out_dir.eval_kfac}
     metrics:

@@ -484,6 +484,12 @@ def main():
     parser.add_argument("--loose", type=float, default=0.75, help="Loose threshold")
     parser.add_argument("--skip-baseline", action="store_true",
                        help="Skip baseline evaluation")
+    parser.add_argument("--only-baseline", action="store_true",
+                       help="Only run baseline evaluation (no K-FAC), and save baseline metrics. "
+                            "When set, --baseline specifies the output directory for baseline predictions.")
+    parser.add_argument("--baseline", type=str, default=None,
+                       help="Path to precomputed baseline predictions (.i32 file or directory) for nDCG. "
+                            "When used with --only-baseline, this is the output directory for predictions.")
     parser.add_argument("--perplexity", action="store_true",
                        help="Compute perplexity using BSN pt_cache (pre and post)")
     parser.add_argument("--verbose", action="store_true",
@@ -499,6 +505,8 @@ def main():
         parser.error("--bergson-factors and --goodfire-factors are mutually exclusive")
     if args.eigenvalue_corrections and not args.bergson_factors:
         parser.error("--eigenvalue-corrections requires --bergson-factors")
+    if args.only_baseline and args.skip_baseline:
+        parser.error("--only-baseline and --skip-baseline are mutually exclusive")
 
     # Suppress HF logging
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -556,12 +564,15 @@ def main():
 
     # BASELINE EVALUATION
     baseline_results = None
-    if not args.skip_baseline:
+    pre_ppl_bsn = None
+    if not args.skip_baseline or args.only_baseline:
         print("\n" + "="*60)
         print("BASELINE EVALUATION (before K-FAC)")
         print("="*60)
 
         evaluator = MemorizationEvaluator(model, tokenizer, args.model_size, verbose=args.verbose)
+        # When --only-baseline is set, use --baseline as the output directory for nDCG predictions
+        ndcg_baseline_output_dir = args.baseline if args.only_baseline else None
         baseline_results = evaluator.run_all_evals(
             prefix_len=args.prefix,
             suffix_len=args.suffix,
@@ -571,6 +582,7 @@ def main():
             include_clean_nonmem=True,
             baseline_model=model,
             ndcg_max_tokens=200000,
+            ndcg_baseline_output_dir=ndcg_baseline_output_dir,
         )
 
         if 'memorization' in baseline_results:
@@ -579,7 +591,6 @@ def main():
                   f"loose_acc={mem['loose_acc']:.4f}, "
                   f"avg_lev={mem['avg_levenshtein_norm']:.4f}")
         print(f"nDCG@10: {baseline_results['ndcg']:.4f}")
-        pre_ppl_bsn = None
         if perp_loader is not None:
             try:
                 pre_ppl_bsn = perplexity(perp_loader, model)
@@ -587,8 +598,8 @@ def main():
             except Exception as e:
                 print(f"[warn] Perplexity (BSN, pre) failed: {e}")
 
-    # APPLY K-FAC
-    if layer_order:
+    # APPLY K-FAC (skipped when --only-baseline)
+    if not args.only_baseline and layer_order:
         print("\n" + "="*60)
         print(f"APPLYING K-FAC TO LAYERS: {layer_order}")
         if args.bergson_factors:
@@ -618,36 +629,51 @@ def main():
                 use_weight_coefficients=args.weight_coefficients,
             )
 
-    # POST-K-FAC EVALUATION
-    print("\n" + "="*60)
-    print("POST-K-FAC EVALUATION")
-    print("="*60)
-
-    evaluator = MemorizationEvaluator(model, tokenizer, args.model_size, verbose=args.verbose)
-    results = evaluator.run_all_evals(
-        prefix_len=args.prefix,
-        suffix_len=args.suffix,
-        batch_size=args.bs,
-        loose_threshold=args.loose,
-        include_perplexity=False,
-        include_clean_nonmem=True,
-        baseline_model=None,
-        ndcg_max_tokens=200000,
-    )
-
-    if 'memorization' in results:
-        mem = results['memorization']
-        print(f"Memorization: strict_acc={mem['strict_acc']:.4f}, "
-              f"loose_acc={mem['loose_acc']:.4f}, "
-              f"avg_lev={mem['avg_levenshtein_norm']:.4f}")
-    print(f"nDCG@10: {results['ndcg']:.4f}")
+    # POST-K-FAC EVALUATION (skipped when --only-baseline)
     post_ppl_bsn = None
-    if perp_loader is not None:
-        try:
-            post_ppl_bsn = perplexity(perp_loader, model)
-            print(f"Perplexity (BSN clean set, post): {post_ppl_bsn:.4f}")
-        except Exception as e:
-            print(f"[warn] Perplexity (BSN, post) failed: {e}")
+    if args.only_baseline:
+        # Use baseline results and skip post-K-FAC evaluation
+        results = baseline_results
+        evaluator = MemorizationEvaluator(model, tokenizer, args.model_size, verbose=args.verbose)
+        method = "baseline"
+        save_dir = None  # Don't save unmodified model
+    else:
+        print("\n" + "="*60)
+        print("POST-K-FAC EVALUATION")
+        print("="*60)
+
+        evaluator = MemorizationEvaluator(model, tokenizer, args.model_size, verbose=args.verbose)
+        results = evaluator.run_all_evals(
+            prefix_len=args.prefix,
+            suffix_len=args.suffix,
+            batch_size=args.bs,
+            loose_threshold=args.loose,
+            include_perplexity=False,
+            include_clean_nonmem=True,
+            baseline_model=None,
+            ndcg_max_tokens=200000,
+            ndcg_baseline_file=args.baseline,
+        )
+
+        if 'memorization' in results:
+            mem = results['memorization']
+            print(f"Memorization: strict_acc={mem['strict_acc']:.4f}, "
+                  f"loose_acc={mem['loose_acc']:.4f}, "
+                  f"avg_lev={mem['avg_levenshtein_norm']:.4f}")
+        print(f"nDCG@10: {results['ndcg']:.4f}")
+        if perp_loader is not None:
+            try:
+                post_ppl_bsn = perplexity(perp_loader, model)
+                print(f"Perplexity (BSN clean set, post): {post_ppl_bsn:.4f}")
+            except Exception as e:
+                print(f"[warn] Perplexity (BSN, post) failed: {e}")
+
+        method = "kfac"
+        # Save final edited model in HuggingFace format (for use with olmes benchmarks)
+        save_dir = str(DATA_PATHS.EDITED_MODELS_ROOT)
+        model.save_pretrained(save_dir)
+        tokenizer.save_pretrained(save_dir)
+        print(f"Saved edited model to: {save_dir}")
 
     if not args.verbose:
         print("\n" + "="*60)
@@ -671,15 +697,9 @@ def main():
     if 'ndcg' in results:
         print(f"\nnDCG@10: {results['ndcg']:.4f}")
 
-    # Save final edited model in HuggingFace format (for use with olmes benchmarks)
-    save_dir = str(DATA_PATHS.EDITED_MODELS_ROOT)
-    model.save_pretrained(save_dir)
-    tokenizer.save_pretrained(save_dir)
-    print(f"Saved edited model to: {save_dir}")
-
     evaluator.save_results(
         results,
-        method="kfac",
+        method=method,
         layer_config=layer_to_variances,
         output_dir=(args.results_dir or None),
         filename_tag=(args.results_tag or None),
@@ -689,7 +709,7 @@ def main():
             "use_cache": args.use_cache,
             "edited_model_path": save_dir,
             # Persist BSN-style perplexities for centralized comparison
-            "kfac_perplexity_bsn_pre": float(pre_ppl_bsn) if ('pre_ppl_bsn' in locals() and pre_ppl_bsn is not None) else None,
+            "kfac_perplexity_bsn_pre": float(pre_ppl_bsn) if pre_ppl_bsn is not None else None,
             "kfac_perplexity_bsn_post": float(post_ppl_bsn) if post_ppl_bsn is not None else None,
             "kfac_perplexity_block_size": 112,
             "kfac_perplexity_pt_cache_path": DATA_PATHS.OLMO2_CLEAN_PT_CACHE_112,

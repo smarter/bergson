@@ -34,6 +34,7 @@ out_suffix: "${method.name}/${model.size}"
 out_dir:
   prepare_pile10k: "memorization_kfac/data/pile10k_None.txt"
   prepare_pile10k_cache: "out/prepare_pile10k_cache"
+  baseline_cache: "out/baseline_cache/${model.size}"
   collect_kfac: "out/collect_kfac/${out_suffix}"
   eval_kfac: "out/eval_kfac/${out_suffix}"
   plot_figure2: "out/plot_figure2/${out_suffix}"

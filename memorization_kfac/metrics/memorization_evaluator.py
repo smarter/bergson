@@ -134,26 +134,49 @@ class MemorizationEvaluator:
                   batch_size: int = 8,
                   seq_len: int = 1024,
                   max_tokens: int = 200000,
-                  show_progress: bool = False) -> float:
+                  show_progress: bool = False,
+                  baseline_file: Optional[str] = None,
+                  baseline_output_dir: Optional[str] = None) -> float:
         """
         Run nDCG evaluation.
         Uses existing NDCGEvaluator class.
+
+        Args:
+            baseline_file: Path to precomputed baseline predictions (.i32 file or directory).
+                          If None, generates baseline from current model (which may be edited).
+            baseline_output_dir: Directory to save generated baseline predictions.
+                                Only used when baseline_file is None.
         """
-        # Get baseline predictions cache
-        # Pass the already-loaded model to avoid double-loading!
         model_dtype = next(self.model.parameters()).dtype
-        baseline_file = get_baseline_predictions(
-            model_name=MODEL_CONFIGS[self.model_size]["model_name"],
-            data_path=self.ndcg_path,
-            k=k,
-            seq_len=seq_len,
-            batch_size=batch_size,
-            max_tokens=max_tokens,
-            dtype=model_dtype,  # Use actual model dtype
-            model_instance=self.model,  # Pass existing model
-            tokenizer_instance=self.tokenizer,  # Pass existing tokenizer
-            verbose=self.verbose
-        )
+
+        # Use provided baseline or generate from current model
+        if baseline_file is None:
+            baseline_file = get_baseline_predictions(
+                model_name=MODEL_CONFIGS[self.model_size]["model_name"],
+                data_path=self.ndcg_path,
+                cache_dir=baseline_output_dir,  # Save to specified directory
+                k=k,
+                seq_len=seq_len,
+                batch_size=batch_size,
+                max_tokens=max_tokens,
+                dtype=model_dtype,
+                model_instance=self.model,
+                tokenizer_instance=self.tokenizer,
+                verbose=self.verbose
+            )
+        else:
+            # Handle directory input - find .i32 file inside
+            import glob
+            if os.path.isdir(baseline_file):
+                i32_files = glob.glob(os.path.join(baseline_file, "*.i32"))
+                if len(i32_files) == 1:
+                    baseline_file = i32_files[0]
+                elif len(i32_files) == 0:
+                    raise FileNotFoundError(f"No .i32 files found in {baseline_file}")
+                else:
+                    raise ValueError(f"Multiple .i32 files found in {baseline_file}: {i32_files}")
+            if self.verbose:
+                print(f"Using precomputed baseline: {baseline_file}")
         
         # Create dataset using cached tokenization
         dataset = self._get_cached_text_dataset(
@@ -243,7 +266,9 @@ class MemorizationEvaluator:
                      include_clean_nonmem: bool = True,
                      baseline_model=None,
                      ndcg_k: int = 10,
-                     ndcg_max_tokens: int = 200000) -> Dict:
+                     ndcg_max_tokens: int = 200000,
+                     ndcg_baseline_file: Optional[str] = None,
+                     ndcg_baseline_output_dir: Optional[str] = None) -> Dict:
         """
         Run complete evaluation suite.
         
@@ -279,7 +304,9 @@ class MemorizationEvaluator:
             batch_size=8,
             seq_len=1024,
             max_tokens=ndcg_max_tokens,
-            show_progress=False
+            show_progress=False,
+            baseline_file=ndcg_baseline_file,
+            baseline_output_dir=ndcg_baseline_output_dir
         )
         
         # 4. Clean perplexity (optional)
