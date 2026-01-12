@@ -2,38 +2,38 @@ model:
   name: allenai/OLMo-2-1124-7B
   size: 7b
   layer_mass:
-    gate: 0.4
-    up: 0.4
+    gate: 0.6
+    up: 0.6
     down: 1.0
   layers:
     '23':
-      gate: 0.4
-      up: 0.4
+      gate: 0.6
+      up: 0.6
       down: 1.0
     '24':
-      gate: 0.4
-      up: 0.4
+      gate: 0.6
+      up: 0.6
       down: 1.0
     '25':
-      gate: 0.4
-      up: 0.4
+      gate: 0.6
+      up: 0.6
       down: 1.0
 eval_kfac:
   args:
     bs: 96
-    bergson-factors: out/collect_kfac/bergson/7b
-    layers-json: '{"23": {"gate": 0.4, "up": 0.4, "down": 1.0}, "24": {"gate": 0.4,
-      "up": 0.4, "down": 1.0}, "25": {"gate": 0.4, "up": 0.4, "down": 1.0}}'
-  use_eigenvalue_corrections: true
+    goodfire-factors: out/collect_kfac/goodfire/7b
+    layers-json: '{"23": {"gate": 0.6, "up": 0.6, "down": 1.0}, "24": {"gate": 0.6,
+      "up": 0.6, "down": 1.0}, "25": {"gate": 0.6, "up": 0.6, "down": 1.0}}'
+  use_eigenvalue_corrections: false
   use_weight_coefficients: false
 method:
-  name: bergson
+  name: goodfire
 collect_kfac:
-  script: memorization_kfac/data/collect_kfac_bergson.py
-  extra_dep: bergson/
-  fsdp: true
-  world_size: 8
-  bf16_batch_size: 32
+  script: memorization_kfac/data/collect_kfac_multilayer.py
+  extra_dep: memorization_kfac/data/collect_kfac_multilayer.py
+  fsdp: false
+  world_size: null
+  bf16_batch_size: 24
   sample_labels: true
   args:
     device: cuda
@@ -46,24 +46,24 @@ collect_kfac:
     - '24'
     - '25'
     layers_per_pass: 3
-    batch_size: 32
+    batch_size: 24
 benchmark:
   args:
-    task: gsm8k::olmes
-    batch-size: 28
+    task: winogrande::olmes
+    batch-size: 128
 model_method:
-  gate_up_mass: 0.4
-out_suffix: bergson/7b
+  gate_up_mass: 0.6
+out_suffix: goodfire/7b
 out_dir:
   prepare_pile10k: memorization_kfac/data/pile10k_None.txt
   prepare_pile10k_cache: out/prepare_pile10k_cache
-  collect_kfac: out/collect_kfac/bergson/7b
-  eval_kfac: out/eval_kfac/bergson/7b
-  plot_figure2: out/plot_figure2/bergson/7b
-  benchmark: out/benchmark/bergson/7b
+  collect_kfac: out/collect_kfac/goodfire/7b
+  eval_kfac: out/eval_kfac/goodfire/7b
+  plot_figure2: out/plot_figure2/goodfire/7b
+  benchmark: out/benchmark/goodfire/7b
 computed:
-  eigenvalue_corrections_flag: --eigenvalue-corrections
+  eigenvalue_corrections_flag: ''
   weight_coefficients_flag: ''
   sample_labels_flag: --sample_labels
-  fsdp_flag: --fsdp
-  world_size_flag: --world_size 8
+  fsdp_flag: ''
+  world_size_flag: ''
