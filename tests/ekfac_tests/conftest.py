@@ -45,7 +45,15 @@ def pytest_addoption(parser) -> None:
         type=str,
         default="fp32",
         choices=["fp32", "fp16", "bf16", "int4", "int8"],
-        help="Model precision for ground truth generation (default: fp32)",
+        help="Model precision for KFAC (default: fp32)",
+    )
+    parser.addoption(
+        "--gt_precision",
+        action="store",
+        type=str,
+        default="fp32",
+        choices=["fp32", "fp16", "bf16", "int4", "int8"],
+        help="Model precision for ground truth computation (default: fp32)",
     )
     parser.addoption(
         "--test_dir",
@@ -102,6 +110,10 @@ def overwrite(request) -> bool:
 def precision(request) -> Precision:
     return request.config.getoption("--precision")
 
+@pytest.fixture(scope="session")
+def gt_precision(request) -> Precision:
+    return request.config.getoption("--gt_precision")
+
 
 @pytest.fixture(scope="session")
 def use_fsdp(request) -> bool:
@@ -144,26 +156,24 @@ def ground_truth_base_path(test_dir: str) -> str:
 def ground_truth_setup(
     request,
     test_dir: str,
-    precision: Precision,
+    model_name: str,
+    gt_precision: Precision,
     overwrite: bool,
     token_batch_size: int,
     n_samples: int,
+    world_size: int,
 ) -> dict[str, Any]:
-    # Setup for generation
-    model_name = request.config.getoption("--model_name")
-    world_size = request.config.getoption("--world_size")
-
     print(f"\n{'='*60}")
     print("Generating ground truth test data")
     print(f"Model: {model_name}")
-    print(f"Precision: {precision}")
+    print(f"Ground Truth Precision: {gt_precision}")
     print(f"World size: {world_size}")
     print(f"Token batch size: {token_batch_size}")
     print(f"Samples: {n_samples}")
     print(f"{'='*60}\n")
 
     cfg, workers, device, target_modules, dtype = setup_paths_and_config(
-        precision=precision,
+        precision=gt_precision,
         test_path=ground_truth_base_path(test_dir),
         model_name=model_name,
         world_size=world_size,
@@ -294,6 +304,7 @@ def ekfac_results_path(
     ground_truth_path: str,
     ground_truth_setup: dict[str, Any],
     overwrite: bool,
+    precision: Precision,
     use_fsdp: bool,
     world_size: int,
 ) -> str:
@@ -311,10 +322,10 @@ def ekfac_results_path(
 
     setup = ground_truth_setup
     # Copy cfg with updated fields (avoids mutating the shared fixture)
-    cfg = replace(setup["cfg"], run_path=base_run_path, debug=True, fsdp=use_fsdp)
+    cfg = replace(setup["cfg"], run_path=base_run_path, debug=True, fsdp=use_fsdp, precision=precision)
     cfg.distributed = replace(cfg.distributed, nproc_per_node=world_size)
 
-    print("\nRunning EKFAC computation...")
+    print(f"\nRunning EKFAC computation (precision={precision})...")
     results_path = approximate_hessians(cfg, hessian_cfg)
 
     print(f"EKFAC computation completed in {results_path}")
