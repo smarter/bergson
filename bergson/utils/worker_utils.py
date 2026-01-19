@@ -23,6 +23,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
+    GradientCheckpointingLayer,
     PreTrainedModel,
 )
 
@@ -224,6 +225,23 @@ def setup_model_and_peft(
             autocast_adapter_dtype=False,
         )
         target_modules = extract_peft_target_modules(model)  # type: ignore
+
+    # `gradient_checkpointing_enable()` enables checkpointing on every layer.
+    # The optimal time-memory trade-off would be to only checkpoint sqrt(n)
+    # layer but this isn't supported by transformers (see
+    # https://github.com/huggingface/transformers/issues/26103). We could use
+    # the more flexible `apply_activation_checkpointing` from
+    # `torch.distributed.algorithms._checkpoint.checkpoint_wrapper`
+    # instead, but this changes the layer hierarchy and so usage of
+    # `filter_modules` and `target_modules` would need to be adapted.
+    if cfg.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+        model.config.use_cache = False  # Always required for gradient checkpointing
+        # `gradient_checkpointing_enable()` requires `training=True` on the
+        # checkpointing layers, see https://github.com/huggingface/transformers/issues/43381
+        for module in model.modules():
+            if isinstance(module, GradientCheckpointingLayer):
+                module.training = True
 
     # Configure gradients
     model.requires_grad_(False)

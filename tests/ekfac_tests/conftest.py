@@ -80,6 +80,12 @@ def pytest_addoption(parser) -> None:
         default=100,
         help="Number of samples from pile-10k dataset (default: 100)",
     )
+    parser.addoption(
+        "--gradient_checkpointing",
+        action="store_true",
+        default=False,
+        help="Enable gradient checkpointing (except for the ground truth)",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -102,7 +108,6 @@ def overwrite(request) -> bool:
 def precision(request) -> Precision:
     return request.config.getoption("--precision")
 
-
 @pytest.fixture(scope="session")
 def use_fsdp(request) -> bool:
     return request.config.getoption("--use_fsdp")
@@ -121,6 +126,11 @@ def token_batch_size(request) -> int:
 @pytest.fixture(scope="session")
 def n_samples(request) -> int:
     return request.config.getoption("--n_samples")
+
+
+@pytest.fixture(scope="session")
+def gradient_checkpointing(request) -> bool:
+    return request.config.getoption("--gradient_checkpointing")
 
 
 @pytest.fixture(scope="session")
@@ -144,15 +154,13 @@ def ground_truth_base_path(test_dir: str) -> str:
 def ground_truth_setup(
     request,
     test_dir: str,
+    model_name: str,
     precision: Precision,
     overwrite: bool,
     token_batch_size: int,
     n_samples: int,
+    world_size: int,
 ) -> dict[str, Any]:
-    # Setup for generation
-    model_name = request.config.getoption("--model_name")
-    world_size = request.config.getoption("--world_size")
-
     print(f"\n{'='*60}")
     print("Generating ground truth test data")
     print(f"Model: {model_name}")
@@ -293,6 +301,7 @@ def ekfac_results_path(
     test_dir: str,
     ground_truth_path: str,
     ground_truth_setup: dict[str, Any],
+    gradient_checkpointing: bool,
     overwrite: bool,
     use_fsdp: bool,
     world_size: int,
@@ -311,7 +320,13 @@ def ekfac_results_path(
 
     setup = ground_truth_setup
     # Copy cfg with updated fields (avoids mutating the shared fixture)
-    cfg = replace(setup["cfg"], run_path=base_run_path, debug=True, fsdp=use_fsdp)
+    cfg = replace(
+        setup["cfg"],
+        run_path=base_run_path,
+        debug=True,
+        gradient_checkpointing=gradient_checkpointing,
+        fsdp=use_fsdp,
+    )
     cfg.distributed = replace(cfg.distributed, nproc_per_node=world_size)
 
     print("\nRunning EKFAC computation...")

@@ -446,6 +446,9 @@ class IndexConfig(AttributionConfig, Serializable):
     """Whether to compute per-token gradients instead of per-example.
     Incompatible with reduce mode."""
 
+    gradient_checkpointing: bool = False
+    """Whether to enable gradient checkpointing to reduce memory usage."""
+
     modules: list[str] = field(default_factory=list)
     """Modules to use for the query. If empty, all modules will be used."""
 

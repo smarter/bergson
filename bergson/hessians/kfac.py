@@ -41,53 +41,49 @@ class CovarianceCollector(HookCollectorBase):
         )
 
     def forward_hook(self, module: nn.Module, a: Tensor) -> None:
-        """Compute activation covariance: A^T @ A."""
-        name = assert_type(str, module._name)
-        A_cov_ki = self.A_cov_dict[name]
+        """Save activations for computing covariance in backward pass."""
+
         mask = self._current_valid_mask
         assert mask is not None, "Valid mask not set for forward hook."
 
         # a: [N, S, I], valid_masks: [N, S] -> select valid positions
-        a_bi = a[mask].to(self.dtype)  # [num_valid, I]
+        a_bi = a[mask]  # [num_valid, I]
 
-        # Compute local covariance
-        local_update_ii = a_bi.mT @ a_bi
-
-        # All-reduce across ranks
-        if dist.is_initialized():
-            dist.all_reduce(local_update_ii, op=dist.ReduceOp.SUM)
-
-        # Extract our shard
-        start_row = self.rank * A_cov_ki.shape[0]
-        end_row = (self.rank + 1) * A_cov_ki.shape[0]
-        update_slice_ki = local_update_ii[start_row:end_row, :]
-
-        # Accumulate
-        A_cov_ki.add_(update_slice_ki)
+        module._inputs = a_bi
 
     def backward_hook(self, module: nn.Module, g: Tensor) -> None:
-        """Compute gradient covariance: G^T @ G."""
+        """Compute both activation and gradient covariances using cached activations."""
         name = assert_type(str, module._name)
+        A_cov_ki = self.A_cov_dict[name]
         S_cov_po = self.S_cov_dict[name]
         mask = self._current_valid_mask
 
         # g: [N, S, O], mask: [N, S] -> select valid positions
         g_bo = g[mask].to(self.dtype)  # [num_valid, O]
+        a_bi = module._inputs.to(self.dtype)
+        assert isinstance(a_bi, Tensor)
 
-        # Compute local covariance
+        # Compute local covariances
         local_update_oo = g_bo.mT @ g_bo
+        local_update_ii = a_bi.mT @ a_bi
 
         # All-reduce across ranks
         if dist.is_initialized():
             dist.all_reduce(local_update_oo, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_update_ii, op=dist.ReduceOp.SUM)
 
         # Extract our shard
-        start_row = self.rank * S_cov_po.shape[0]
-        end_row = (self.rank + 1) * S_cov_po.shape[0]
-        update_slice_po = local_update_oo[start_row:end_row, :]
+        start_row_grad = self.rank * S_cov_po.shape[0]
+        end_row_grad = (self.rank + 1) * S_cov_po.shape[0]
+        update_slice_po = local_update_oo[start_row_grad:end_row_grad, :]
+
+        start_row_act = self.rank * A_cov_ki.shape[0]
+        end_row_act = (self.rank + 1) * A_cov_ki.shape[0]
+        update_slice_ki = local_update_ii[start_row_act:end_row_act, :]
 
         # Accumulate
         S_cov_po.add_(update_slice_po)
+        A_cov_ki.add_(update_slice_ki)
 
     def process_batch(self, indices: list[int], **kwargs) -> None:
         """No per-batch processing needed for covariance collection."""
