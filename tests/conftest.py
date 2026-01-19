@@ -1,7 +1,12 @@
-import pytest
-import torch
-from datasets import Dataset
-from transformers import AutoConfig, AutoModelForCausalLM
+# Install jaxtyping import hook before any bergson imports
+from jaxtyping import install_import_hook
+
+install_import_hook("bergson.hessians", "beartype.beartype")
+
+import pytest  # noqa: E402
+import torch  # noqa: E402
+from datasets import Dataset  # noqa: E402
+from transformers import AutoConfig, AutoModelForCausalLM  # noqa: E402
 
 
 @pytest.fixture
