@@ -586,8 +586,9 @@ def compute_eigenvectors_step(
             f"{name}: eigenvectors_a.sum()={eigenvectors_a.sum()}, "
             f"eigenvectors_g.sum()={eigenvectors_g.sum()}"
         )
-        eigenvectors_activations[name] = eigenvectors_a.to(dtype=dtype).contiguous()
-        eigenvectors_gradients[name] = eigenvectors_g.to(dtype=dtype).contiguous()
+        # Store in float32 to match EKFAC implementation
+        eigenvectors_activations[name] = eigenvectors_a.to(torch.float32).contiguous()
+        eigenvectors_gradients[name] = eigenvectors_g.to(torch.float32).contiguous()
 
     save_file(
         eigenvectors_activations,
