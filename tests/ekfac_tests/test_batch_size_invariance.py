@@ -66,7 +66,6 @@ def test_trace_batch_invariant(seq_lengths, num_batches, tmp_path):
             collector = CovarianceCollector(
                 model=model.base_model,
                 target_modules={"linear"},
-                dtype=torch.float32,
                 path=str(index_cfg.partial_run_path),
             )
 

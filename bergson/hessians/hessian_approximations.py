@@ -221,7 +221,9 @@ def collect_hessians(
         collector = LambdaCollector(**collector_args)
         desc += " (eigenvalue correction)"
     else:
-        collector_args["dtype"] = hessian_dtype
+        # kfac uses float32 internally; other methods need explicit dtype
+        if hessian_cfg.method != "kfac":
+            collector_args["dtype"] = hessian_dtype
         collector = HESSIAN_APPROXIMATIONS[hessian_cfg.method](**collector_args)
 
     validate_batch_size(model, index_cfg.token_batch_size, collector)

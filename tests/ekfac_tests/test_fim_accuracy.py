@@ -146,7 +146,6 @@ def test_kfac_fim_accuracy(seq_lengths, num_batches, max_rel_error, sample, tmp_
     collector = CovarianceCollector(
         model=model.base_model,
         target_modules={"linear"},
-        dtype=torch.float32,
         path=str(index_cfg.partial_run_path),
     )
 

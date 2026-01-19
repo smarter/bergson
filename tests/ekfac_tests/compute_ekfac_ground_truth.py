@@ -413,7 +413,6 @@ def compute_covariances_step(
         os.makedirs(ekfac_path, exist_ok=True)
         ekfac_collector = CovarianceCollector(
             model=model.base_model,
-            dtype=dtype,
             path=ekfac_path,
             target_modules=target_modules,
         )

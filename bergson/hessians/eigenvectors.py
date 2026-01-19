@@ -223,6 +223,8 @@ def compute_eigendecomposition(
     via _compute_full_matrix(). Output sharding is inferred from the
     eigenvector shapes.
 
+    Eigenvectors are stored in float32 to avoid precision loss.
+
     Args:
         covariance_path: Full path to the covariance sharded directory.
         total_processed: Number of samples used to compute covariance.
@@ -241,7 +243,6 @@ def compute_eigendecomposition(
     first_shard_path = os.path.join(covariance_path, "shard_0.safetensors")
     with safe_open(first_shard_path, framework="pt") as f:
         all_keys = list(f.keys())
-        original_dtype = f.get_tensor(all_keys[0]).dtype
         # Get dimensions for fair distribution (columns not sharded, shape[-1]=d)
         key_dimensions = {key: f.get_tensor(key).shape[-1] for key in all_keys}
 
@@ -265,7 +266,6 @@ def compute_eigendecomposition(
             world_size=world_size,
         )
 
-        # original_dtype = matrix.dtype
         matrix_normalized = matrix.to(torch.float64) / total_processed
         matrix_normalized = (matrix_normalized + matrix_normalized.T).div(2)
 
@@ -280,16 +280,17 @@ def compute_eigendecomposition(
         except Exception as e:
             raise RuntimeError(f"Eigendecomposition failed for {key}") from e
 
-        # TODO: Maybe possible to avoid CPU transfer here?
-        eigenvectors = eigenvectors.to(original_dtype).to(device="cpu").contiguous()
+        # Store in float32 to avoid precision loss; transfer to CPU for memory
+        eigenvectors = eigenvectors.to(torch.float32).to(device="cpu").contiguous()
         covariance_eigenvectors[key] = eigenvectors
 
     # Merge eigenvectors across ranks and re-shard for output
+    # Keep eigenvectors in float32 to avoid precision loss when sharding
     covariance_eigenvectors = _merge_and_shard_eigenvectors(
         input_dict=covariance_eigenvectors,
         all_keys=all_keys,
         key_dimensions=key_dimensions,
-        dtype=original_dtype,  # type: ignore
+        dtype=torch.float32,
         rank=rank,
         world_size=world_size,
         device=device,

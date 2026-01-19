@@ -1,7 +1,6 @@
 import os
 from dataclasses import dataclass
 
-import torch
 import torch.distributed as dist
 import torch.nn as nn
 from safetensors.torch import save_file
@@ -22,9 +21,10 @@ class CovarianceCollector(HookCollectorBase):
         S_cov = sum over batches of (G^T @ G)  for gradients
 
     where X is input activations [N*S, I] and G is output gradients [N*S, O].
+
+    Covariances are computed in float32 to avoid numerical issues with bfloat16.
     """
 
-    dtype: torch.dtype
     path: str
 
     def setup(self) -> None:
@@ -36,7 +36,6 @@ class CovarianceCollector(HookCollectorBase):
         self.shard_computer._init_covariance_dict(
             activation_covariance_dict=self.A_cov_dict,
             gradient_covariance_dict=self.S_cov_dict,
-            dtype=self.dtype,
             target_info=self.target_info,
         )
 
@@ -48,7 +47,8 @@ class CovarianceCollector(HookCollectorBase):
         assert mask is not None, "Valid mask not set for forward hook."
 
         # a: [N, S, I], valid_masks: [N, S] -> select valid positions
-        a_bi = a[mask]  # [num_valid, I]
+        # Convert to float32 to avoid bfloat16 numerical issues
+        a_bi = a[mask].float()  # [num_valid, I]
 
         # Compute local covariance
         local_update_ii = a_bi.mT @ a_bi
@@ -72,7 +72,8 @@ class CovarianceCollector(HookCollectorBase):
         mask = self._current_valid_mask
 
         # g: [N, S, O], mask: [N, S] -> select valid positions
-        g_bo = g[mask]  # [num_valid, O]
+        # Convert to float32 to avoid bfloat16 numerical issues
+        g_bo = g[mask].float()  # [num_valid, O]
 
         # Compute local covariance
         local_update_oo = g_bo.mT @ g_bo
