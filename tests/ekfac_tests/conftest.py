@@ -88,6 +88,12 @@ def pytest_addoption(parser) -> None:
         default=100,
         help="Number of samples from pile-10k dataset (default: 100)",
     )
+    parser.addoption(
+        "--gradient_checkpointing",
+        action="store_true",
+        default=False,
+        help="Enable gradient checkpointing (except for the ground truth)",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -109,6 +115,7 @@ def overwrite(request) -> bool:
 @pytest.fixture(scope="session")
 def precision(request) -> Precision:
     return request.config.getoption("--precision")
+
 
 @pytest.fixture(scope="session")
 def gt_precision(request) -> Precision:
@@ -133,6 +140,11 @@ def token_batch_size(request) -> int:
 @pytest.fixture(scope="session")
 def n_samples(request) -> int:
     return request.config.getoption("--n_samples")
+
+
+@pytest.fixture(scope="session")
+def gradient_checkpointing(request) -> bool:
+    return request.config.getoption("--gradient_checkpointing")
 
 
 @pytest.fixture(scope="session")
@@ -303,6 +315,7 @@ def ekfac_results_path(
     test_dir: str,
     ground_truth_path: str,
     ground_truth_setup: dict[str, Any],
+    gradient_checkpointing: bool,
     overwrite: bool,
     precision: Precision,
     use_fsdp: bool,
@@ -322,7 +335,14 @@ def ekfac_results_path(
 
     setup = ground_truth_setup
     # Copy cfg with updated fields (avoids mutating the shared fixture)
-    cfg = replace(setup["cfg"], run_path=base_run_path, debug=True, fsdp=use_fsdp, precision=precision)
+    cfg = replace(
+        setup["cfg"],
+        run_path=base_run_path,
+        debug=True,
+        gradient_checkpointing=gradient_checkpointing,
+        fsdp=use_fsdp,
+        precision=precision,
+    )
     cfg.distributed = replace(cfg.distributed, nproc_per_node=world_size)
 
     print(f"\nRunning EKFAC computation (precision={precision})...")

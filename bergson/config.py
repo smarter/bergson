@@ -197,6 +197,9 @@ class IndexConfig:
     overwrite: bool = False
     """Whether to overwrite any existing index in the run path."""
 
+    gradient_checkpointing: bool = False
+    """Whether to enable gradient checkpointing to reduce memory usage."""
+
     distributed: DistributedConfig = field(default_factory=DistributedConfig)
     """Configuration for multi-node distributed preconditioner computation."""
 

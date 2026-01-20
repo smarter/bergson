@@ -249,6 +249,10 @@ def load_model_step(cfg: IndexConfig, dtype: torch.dtype) -> PreTrainedModel:
         ),
         torch_dtype=dtype,
     )
+
+    if cfg.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+
     return model
 
 

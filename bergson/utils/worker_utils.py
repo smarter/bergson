@@ -183,6 +183,10 @@ def setup_model_and_peft(
                         f"Adapter parameter '{processed_name}' not found in the model."
                     )
 
+    # Enable gradient checkpointing if requested
+    if cfg.gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+
     # Configure gradients
     model.requires_grad_(False)
     model.get_input_embeddings().requires_grad_(True)  # type: ignore
