@@ -127,7 +127,6 @@ class GradientCollector(HookCollectorBase):
         """
         p = self.processor.projection_dim
         name = assert_type(str, module._name)
-        i = getattr(module, LayerAdapter.in_attr(module))
         normalizer = self.processor.normalizers.get(name)
 
         if isinstance(normalizer, AdamNormalizer):
@@ -142,9 +141,8 @@ class GradientCollector(HookCollectorBase):
             # Append ones to activation for bias term
             ones = torch.ones(a.size(0), a.size(1), 1, device=a.device, dtype=a.dtype)
             a = torch.cat([a, ones], dim=-1)
-            i = i + 1
-            setattr(module, LayerAdapter.in_attr(module), i)
         if p is not None:
+            i = a.shape[-1]  # Actual dimension (includes bias column if added)
             a_projection = self.projection(name, p, i, "right", a.device, a.dtype).T
             a = a @ a_projection  # type: ignore
         # set module._inputs to a
@@ -163,7 +161,6 @@ class GradientCollector(HookCollectorBase):
         assert isinstance(a, torch.Tensor), "Activation cache missing for module"
         name = assert_type(str, module._name)
         p = self.processor.projection_dim
-        i = getattr(module, LayerAdapter.in_attr(module))
         o = getattr(module, LayerAdapter.out_attr(module))
         normalizer = self.processor.normalizers.get(name)
 
@@ -171,6 +168,7 @@ class GradientCollector(HookCollectorBase):
             full_gradient = g.mT @ a  # [N, O, S] @ [N, S, I] → [N, O, I]
             P = normalizer.normalize_(full_gradient)
             if p is not None:
+                i = a.shape[-1]  # Actual dimension (includes bias column if added)
                 g_projection = self.projection(name, p, o, "left", g.device, g.dtype)
                 a_projection = self.projection(name, p, i, "right", g.device, g.dtype).T
                 P = g_projection @ P @ a_projection
@@ -306,7 +304,6 @@ class TraceCollector(HookCollectorBase):
         """
         p = self.processor.projection_dim
         name = assert_type(str, module._name)
-        i = getattr(module, LayerAdapter.in_attr(module))
         normalizer = self.processor.normalizers.get(name)
 
         if isinstance(normalizer, AdamNormalizer):
@@ -321,9 +318,8 @@ class TraceCollector(HookCollectorBase):
             # Append ones to activation for bias term
             ones = torch.ones(a.size(0), a.size(1), 1, device=a.device, dtype=a.dtype)
             a = torch.cat([a, ones], dim=-1)
-            i = i + 1
-            setattr(module, LayerAdapter.in_attr(module), i)
         if p is not None:
+            i = a.shape[-1]
             a_projection = self.projection(name, p, i, "right", a.device, a.dtype).T
             a = a @ a_projection  # type: ignore
         # set module._inputs to a
@@ -342,7 +338,7 @@ class TraceCollector(HookCollectorBase):
         assert isinstance(a, torch.Tensor), "Activation cache missing for module"
         name = assert_type(str, module._name)
         p = self.processor.projection_dim
-        i = getattr(module, LayerAdapter.in_attr(module))
+        i = a.shape[-1]
         o = getattr(module, LayerAdapter.out_attr(module))
         normalizer = self.processor.normalizers.get(name)
 
@@ -422,7 +418,6 @@ class StreamingGradientCollector(HookCollectorBase):
         """
         p = self.processor.projection_dim
         name = assert_type(str, module._name)
-        i = getattr(module, LayerAdapter.in_attr(module))
         normalizer = self.processor.normalizers.get(name)
 
         if isinstance(normalizer, AdamNormalizer):
@@ -437,9 +432,8 @@ class StreamingGradientCollector(HookCollectorBase):
             # Append ones to activation for bias term
             ones = torch.ones(a.size(0), a.size(1), 1, device=a.device, dtype=a.dtype)
             a = torch.cat([a, ones], dim=-1)
-            i = i + 1
-            setattr(module, LayerAdapter.in_attr(module), i)
         if p is not None:
+            i = a.shape[-1]  # Actual dimension (includes bias column if added)
             a_projection = self.projection(name, p, i, "right", a.device, a.dtype).T
             a = a @ a_projection  # type: ignore
         # set module._inputs to a
@@ -458,7 +452,7 @@ class StreamingGradientCollector(HookCollectorBase):
         assert isinstance(a, torch.Tensor), "Activation cache missing for module"
         name = assert_type(str, module._name)
         p = self.processor.projection_dim
-        i = getattr(module, LayerAdapter.in_attr(module))
+        i = a.shape[-1]
         o = getattr(module, LayerAdapter.out_attr(module))
         normalizer = self.processor.normalizers.get(name)
 

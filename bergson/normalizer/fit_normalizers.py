@@ -135,7 +135,6 @@ class NormalizerCollector(HookCollectorBase):
         """
         p = self.processor.projection_dim
         name = assert_type(str, module._name)
-        i = getattr(module, LayerAdapter.in_attr(module))
         normalizer = self.processor.normalizers.get(name)
 
         if isinstance(normalizer, AdamNormalizer):
@@ -150,9 +149,8 @@ class NormalizerCollector(HookCollectorBase):
             # Append ones to activation for bias term
             ones = torch.ones(a.size(0), a.size(1), 1, device=a.device, dtype=a.dtype)
             a = torch.cat([a, ones], dim=-1)
-            i = i + 1
-            setattr(module, LayerAdapter.in_attr(module), i)
         if p is not None:
+            i = a.shape[-1]
             a_projection = self.projection(name, p, i, "right", a.device, a.dtype).T
             a = a @ a_projection  # type: ignore
         # set module._inputs to a
@@ -171,7 +169,7 @@ class NormalizerCollector(HookCollectorBase):
         assert isinstance(a, torch.Tensor), "Activation cache missing for module"
         name = assert_type(str, module._name)
         p = self.processor.projection_dim
-        i = getattr(module, LayerAdapter.in_attr(module))
+        i = a.shape[-1]
         o = getattr(module, LayerAdapter.out_attr(module))
         normalizer = self.processor.normalizers.get(name)
 
