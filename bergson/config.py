@@ -435,6 +435,10 @@ class IndexConfig(AttributionConfig, Serializable):
     For example, "transformer.h.*.mlp.*" will exclude all MLP layers in a
     standard transformer architecture."""
 
+    target_modules: list[str] | None = None
+    """If provided, only collect gradients from these specific modules.
+    For example, ["layers.0.mlp.down_proj", "layers.1.mlp.down_proj"]."""
+
     force_math_sdp: bool = False
     """Disable flash and memory-efficient SDPA backends, forcing the
     math-only kernel. Some models produce inconsistent gradients across

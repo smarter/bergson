@@ -226,6 +226,10 @@ def setup_model_and_peft(
         )
         target_modules = extract_peft_target_modules(model)  # type: ignore
 
+    # Override with CLI-provided target_modules if specified
+    if cfg.target_modules is not None:
+        target_modules = set(cfg.target_modules)
+
     # `gradient_checkpointing_enable()` enables checkpointing on every layer.
     # The optimal time-memory trade-off is to only checkpoint sqrt(n) layers.
     # We achieve this by only setting training=True on every sqrt(n)-th layer.
