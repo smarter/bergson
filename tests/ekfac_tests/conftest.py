@@ -108,6 +108,7 @@ def overwrite(request) -> bool:
 def precision(request) -> Precision:
     return request.config.getoption("--precision")
 
+
 @pytest.fixture(scope="session")
 def use_fsdp(request) -> bool:
     return request.config.getoption("--use_fsdp")

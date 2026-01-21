@@ -227,21 +227,21 @@ def setup_model_and_peft(
         target_modules = extract_peft_target_modules(model)  # type: ignore
 
     # `gradient_checkpointing_enable()` enables checkpointing on every layer.
-    # The optimal time-memory trade-off would be to only checkpoint sqrt(n)
-    # layer but this isn't supported by transformers (see
-    # https://github.com/huggingface/transformers/issues/26103). We could use
-    # the more flexible `apply_activation_checkpointing` from
-    # `torch.distributed.algorithms._checkpoint.checkpoint_wrapper`
-    # instead, but this changes the layer hierarchy and so usage of
-    # `filter_modules` and `target_modules` would need to be adapted.
+    # The optimal time-memory trade-off is to only checkpoint sqrt(n) layers.
+    # We achieve this by only setting training=True on every sqrt(n)-th layer.
     if cfg.gradient_checkpointing:
         model.gradient_checkpointing_enable()
         model.config.use_cache = False  # Always required for gradient checkpointing
         # `gradient_checkpointing_enable()` requires `training=True` on the
         # checkpointing layers, see https://github.com/huggingface/transformers/issues/43381
-        for module in model.modules():
-            if isinstance(module, GradientCheckpointingLayer):
-                module.training = True
+        # We only enable it on every sqrt(n)-th layer for optimal trade-off.
+        ckpt_layers = [
+            m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)
+        ]
+        n = len(ckpt_layers)
+        stride = max(1, int(n**0.5))
+        for i, module in enumerate(ckpt_layers):
+            module.training = i % stride == 0
 
     # Configure gradients
     model.requires_grad_(False)
