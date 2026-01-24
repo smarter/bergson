@@ -213,6 +213,62 @@ def _random_orthonormal(n: int, device, dtype=torch.float32) -> torch.Tensor:
     return q
 
 
+def _partial_random_rotation(n: int, target_cos: float, device, dtype=torch.float32) -> torch.Tensor:
+    """Generate a rotation matrix with target cosine similarity to identity.
+
+    The resulting matrix Q satisfies: diag(Q) ≈ target_cos, meaning each
+    rotated eigenvector has approximately target_cos cosine similarity
+    with the original.
+
+    Args:
+        n: Matrix dimension
+        target_cos: Target cosine similarity (0 = fully random, 1 = identity)
+        device: Torch device
+        dtype: Torch dtype
+
+    Returns:
+        Orthonormal matrix Q such that v @ Q has ~target_cos similarity to v
+    """
+    if target_cos >= 1.0:
+        return torch.eye(n, device=device, dtype=dtype)
+    if target_cos <= 0.0:
+        return _random_orthonormal(n, device, dtype)
+
+    # Generate random orthonormal matrix
+    Q_rand = _random_orthonormal(n, device, dtype)
+
+    # Interpolate between identity and random, then re-orthonormalize
+    # t=0 -> identity (cos=1), t=1 -> random (cos~0)
+    t = 1.0 - target_cos
+    Q_interp = (1 - t) * torch.eye(n, device=device, dtype=dtype) + t * Q_rand
+    Q, _ = torch.linalg.qr(Q_interp)
+    return Q
+
+
+def _parse_randomize_args(randomize_list: List[str]) -> Dict[str, float]:
+    """Parse randomize arguments like 'grad_eigenvectors=0.3' into dict.
+
+    Args:
+        randomize_list: List of strings like ['grad_eigenvectors=0.3', 'act_eigenvectors']
+
+    Returns:
+        Dict mapping eigenvector type to target cosine similarity (0.0 if no value specified)
+    """
+    result = {}
+    valid_keys = {"grad_eigenvectors", "act_eigenvectors"}
+    for item in randomize_list:
+        if "=" in item:
+            key, value = item.split("=", 1)
+            if key not in valid_keys:
+                raise ValueError(f"Invalid randomize key: {key}. Must be one of {valid_keys}")
+            result[key] = float(value)
+        else:
+            if item not in valid_keys:
+                raise ValueError(f"Invalid randomize key: {item}. Must be one of {valid_keys}")
+            result[item] = 0.0  # Fully random
+    return result
+
+
 def load_bergson_kfac_info(
     bergson_path: str,
     layer_names: List[str],
@@ -220,7 +276,7 @@ def load_bergson_kfac_info(
     device: Optional[str] = None,
     keep_on_cpu: bool = False,
     use_eigenvalue_corrections: bool = False,
-    randomize: Optional[List[str]] = None,
+    randomize: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Dict]:
     """
     Load K-FAC info from bergson format with pre-computed eigenvectors.
@@ -235,7 +291,7 @@ def load_bergson_kfac_info(
         device: Device to use for computations
         keep_on_cpu: If True, keep eigenvectors on CPU
         use_eigenvalue_corrections: If True, load pre-computed eigenvalue corrections
-        randomize: List of eigenvector types to randomize ("grad_eigenvectors", "act_eigenvectors")
+        randomize: Dict mapping eigenvector type to target cosine similarity (0=fully random, 1=unchanged)
 
     Returns:
         Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G, lambda_correction (optional)}
@@ -312,16 +368,18 @@ def load_bergson_kfac_info(
         eva_G = eva_G[idx_G]
         evc_G = evc_G[:, idx_G]
 
-        # Apply random orthonormal rotation if requested (for ablation studies)
+        # Apply random rotation if requested (for ablation studies)
         if randomize:
             if "act_eigenvectors" in randomize:
-                Q_A = _random_orthonormal(evc_A.shape[1], evc_A.device, evc_A.dtype)
+                target_cos = randomize["act_eigenvectors"]
+                Q_A = _partial_random_rotation(evc_A.shape[1], target_cos, evc_A.device, evc_A.dtype)
                 evc_A = evc_A @ Q_A
-                print(f"  Randomized activation eigenvectors")
+                print(f"  Randomized activation eigenvectors (target cos={target_cos:.2f})")
             if "grad_eigenvectors" in randomize:
-                Q_G = _random_orthonormal(evc_G.shape[1], evc_G.device, evc_G.dtype)
+                target_cos = randomize["grad_eigenvectors"]
+                Q_G = _partial_random_rotation(evc_G.shape[1], target_cos, evc_G.device, evc_G.dtype)
                 evc_G = evc_G @ Q_G
-                print(f"  Randomized gradient eigenvectors")
+                print(f"  Randomized gradient eigenvectors (target cos={target_cos:.2f})")
 
         # Verify dimensions
         out_features, in_features = W_orig.shape
@@ -370,7 +428,7 @@ def apply_kfac_to_layer(model,
                        refresh_cache: bool = False,
                        use_eigenvalue_corrections: bool = False,
                        use_weight_coefficients: bool = False,
-                       randomize: Optional[List[str]] = None) -> None:
+                       randomize: Optional[Dict[str, float]] = None) -> None:
     """Apply K-FAC to a single layer's MLP projections.
 
     Args:
@@ -385,7 +443,7 @@ def apply_kfac_to_layer(model,
         refresh_cache: Whether to recompute cached weights
         use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
         use_weight_coefficients: Whether to weight pair importance by C_ij^2 (squared weight coefficients)
-        randomize: List of eigenvector types to randomize ("grad_eigenvectors", "act_eigenvectors")
+        randomize: Dict mapping eigenvector type to target cosine similarity (0=fully random, 1=unchanged)
     """
     if bergson_path is None and model_size is None:
         raise ValueError("Either model_size or bergson_path must be provided")
@@ -498,9 +556,10 @@ def main():
                        help="Weight pair importance by C_ij^2 (squared weight coefficients). "
                             "Minimizes second-order loss impact rather than just curvature.")
     parser.add_argument("--randomize", type=str, nargs="+", default=[],
-                       choices=["grad_eigenvectors", "act_eigenvectors"],
-                       help="Apply random orthonormal rotation to specified eigenvectors. "
-                            "Useful for ablation studies. Options: grad_eigenvectors, act_eigenvectors")
+                       help="Apply random rotation to eigenvectors with target cosine similarity. "
+                            "Format: name[=cos_sim]. Examples: 'grad_eigenvectors' (fully random), "
+                            "'act_eigenvectors=0.3' (0.3 cosine similarity with original). "
+                            "Options: grad_eigenvectors, act_eigenvectors")
 
     # Evaluation settings
     parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
@@ -534,6 +593,11 @@ def main():
         parser.error("--eigenvalue-corrections requires --bergson-factors")
     if args.randomize and not args.bergson_factors:
         parser.error("--randomize requires --bergson-factors")
+    if args.randomize:
+        try:
+            _parse_randomize_args(args.randomize)
+        except ValueError as e:
+            parser.error(str(e))
     if args.only_baseline and args.skip_baseline:
         parser.error("--only-baseline and --skip-baseline are mutually exclusive")
 
@@ -656,7 +720,7 @@ def main():
                 refresh_cache=args.refresh_cache,
                 use_eigenvalue_corrections=args.eigenvalue_corrections,
                 use_weight_coefficients=args.weight_coefficients,
-                randomize=args.randomize or None,
+                randomize=_parse_randomize_args(args.randomize) if args.randomize else None,
             )
 
     # POST-K-FAC EVALUATION (skipped when --only-baseline)
