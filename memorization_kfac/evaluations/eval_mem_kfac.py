@@ -206,6 +206,13 @@ def _normalize_bergson_keys(data: Dict[str, torch.Tensor]) -> Dict[str, torch.Te
     return {k.replace("._checkpoint_wrapped_module.", "."): v for k, v in data.items()}
 
 
+def _random_orthonormal(n: int, device, dtype=torch.float32) -> torch.Tensor:
+    """Generate a random orthonormal matrix using QR decomposition."""
+    random_matrix = torch.randn(n, n, device=device, dtype=dtype)
+    q, _ = torch.linalg.qr(random_matrix)
+    return q
+
+
 def load_bergson_kfac_info(
     bergson_path: str,
     layer_names: List[str],
@@ -213,6 +220,7 @@ def load_bergson_kfac_info(
     device: Optional[str] = None,
     keep_on_cpu: bool = False,
     use_eigenvalue_corrections: bool = False,
+    randomize: Optional[List[str]] = None,
 ) -> Dict[str, Dict]:
     """
     Load K-FAC info from bergson format with pre-computed eigenvectors.
@@ -227,6 +235,7 @@ def load_bergson_kfac_info(
         device: Device to use for computations
         keep_on_cpu: If True, keep eigenvectors on CPU
         use_eigenvalue_corrections: If True, load pre-computed eigenvalue corrections
+        randomize: List of eigenvector types to randomize ("grad_eigenvectors", "act_eigenvectors")
 
     Returns:
         Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G, lambda_correction (optional)}
@@ -303,6 +312,17 @@ def load_bergson_kfac_info(
         eva_G = eva_G[idx_G]
         evc_G = evc_G[:, idx_G]
 
+        # Apply random orthonormal rotation if requested (for ablation studies)
+        if randomize:
+            if "act_eigenvectors" in randomize:
+                Q_A = _random_orthonormal(evc_A.shape[1], evc_A.device, evc_A.dtype)
+                evc_A = evc_A @ Q_A
+                print(f"  Randomized activation eigenvectors")
+            if "grad_eigenvectors" in randomize:
+                Q_G = _random_orthonormal(evc_G.shape[1], evc_G.device, evc_G.dtype)
+                evc_G = evc_G @ Q_G
+                print(f"  Randomized gradient eigenvectors")
+
         # Verify dimensions
         out_features, in_features = W_orig.shape
         assert evc_G.shape[0] == out_features, \
@@ -349,7 +369,8 @@ def apply_kfac_to_layer(model,
                        use_cache: bool = True,
                        refresh_cache: bool = False,
                        use_eigenvalue_corrections: bool = False,
-                       use_weight_coefficients: bool = False) -> None:
+                       use_weight_coefficients: bool = False,
+                       randomize: Optional[List[str]] = None) -> None:
     """Apply K-FAC to a single layer's MLP projections.
 
     Args:
@@ -364,6 +385,7 @@ def apply_kfac_to_layer(model,
         refresh_cache: Whether to recompute cached weights
         use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
         use_weight_coefficients: Whether to weight pair importance by C_ij^2 (squared weight coefficients)
+        randomize: List of eigenvector types to randomize ("grad_eigenvectors", "act_eigenvectors")
     """
     if bergson_path is None and model_size is None:
         raise ValueError("Either model_size or bergson_path must be provided")
@@ -388,8 +410,8 @@ def apply_kfac_to_layer(model,
             f"__{proj_layer.weight.dtype.__str__()}.pt"
         )
 
-        # Check cache
-        if use_cache and not refresh_cache and cache_path.exists():
+        # Check cache (skip cache when randomizing since each run should use different rotations)
+        if use_cache and not refresh_cache and not randomize and cache_path.exists():
             with torch.no_grad():
                 cached = torch.load(cache_path, map_location=proj_layer.weight.device)
                 proj_layer.weight.copy_(cached.to(dtype=proj_layer.weight.dtype, device=proj_layer.weight.device))
@@ -405,6 +427,7 @@ def apply_kfac_to_layer(model,
                 model=model,
                 device=proj_layer.weight.device,
                 use_eigenvalue_corrections=use_eigenvalue_corrections,
+                randomize=randomize,
             )
             kfac = KFACTreatmentPairwise(
                 model,
@@ -474,6 +497,10 @@ def main():
     parser.add_argument("--weight-coefficients", action="store_true",
                        help="Weight pair importance by C_ij^2 (squared weight coefficients). "
                             "Minimizes second-order loss impact rather than just curvature.")
+    parser.add_argument("--randomize", type=str, nargs="+", default=[],
+                       choices=["grad_eigenvectors", "act_eigenvectors"],
+                       help="Apply random orthonormal rotation to specified eigenvectors. "
+                            "Useful for ablation studies. Options: grad_eigenvectors, act_eigenvectors")
 
     # Evaluation settings
     parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
@@ -505,6 +532,8 @@ def main():
         parser.error("--bergson-factors and --goodfire-factors are mutually exclusive")
     if args.eigenvalue_corrections and not args.bergson_factors:
         parser.error("--eigenvalue-corrections requires --bergson-factors")
+    if args.randomize and not args.bergson_factors:
+        parser.error("--randomize requires --bergson-factors")
     if args.only_baseline and args.skip_baseline:
         parser.error("--only-baseline and --skip-baseline are mutually exclusive")
 
@@ -627,6 +656,7 @@ def main():
                 refresh_cache=args.refresh_cache,
                 use_eigenvalue_corrections=args.eigenvalue_corrections,
                 use_weight_coefficients=args.weight_coefficients,
+                randomize=args.randomize or None,
             )
 
     # POST-K-FAC EVALUATION (skipped when --only-baseline)
