@@ -33,11 +33,11 @@ collect_kfac:
   extra_dep: bergson/
   fsdp: true
   world_size: 8
-  bf16_batch_size: 32
+  bf16_batch_size: 40
   sample_labels: true
   args:
     device: cuda
-    dtype: bfloat16
+    dtype: float32
     corpus: dolmo
     nbytes: 100000000
     seq_len: 512
@@ -46,7 +46,7 @@ collect_kfac:
     - '24'
     - '25'
     layers_per_pass: 3
-    batch_size: 32
+    batch_size: 20
 benchmark:
   args:
     task: gsm8k::olmes
@@ -57,6 +57,7 @@ out_suffix: bergson/7b
 out_dir:
   prepare_pile10k: memorization_kfac/data/pile10k_None.txt
   prepare_pile10k_cache: out/prepare_pile10k_cache
+  baseline_cache: out/baseline_cache/7b
   collect_kfac: out/collect_kfac/bergson/7b
   eval_kfac: out/eval_kfac/bergson/7b
   plot_figure2: out/plot_figure2/bergson/7b
