@@ -1,0 +1,170 @@
+schema: '2.0'
+stages:
+  prepare_pile10k:
+    cmd:
+    - python memorization_kfac/data/prepare_pile10k.py
+    deps:
+    - path: memorization_kfac/data/prepare_pile10k.py
+      hash: md5
+      md5: 1c7879abbc08baaadbd11268b83994ae
+      size: 1224
+    outs:
+    - path: memorization_kfac/data/pile10k_None.txt
+      hash: md5
+      md5: 1574c0e28ff0313dc8ee4b2342c6943a
+      size: 61084719
+  prepare_pile10k_cache:
+    cmd:
+    - python memorization_kfac/data/prepare_pile10k_cache.py --output 
+      out/prepare_pile10k_cache
+    deps:
+    - path: memorization_kfac/data/pile10k_None.txt
+      hash: md5
+      md5: 1574c0e28ff0313dc8ee4b2342c6943a
+      size: 61084719
+    - path: memorization_kfac/data/prepare_pile10k_cache.py
+      hash: md5
+      md5: d360347c7c4922fd491a9df2d6151ddc
+      size: 2286
+    outs:
+    - path: out/prepare_pile10k_cache
+      hash: md5
+      md5: 284f1404d5ce6e7aeefbbeab013234bc
+      size: 118745867
+  collect_kfac:
+    cmd: python memorization_kfac/data/collect_kfac_bergson.py --model 
+      allenai/OLMo-2-1124-7B --save_dir out/collect_kfac/bergson/7b --device 
+      cuda --dtype float32 --corpus dolmo --nbytes 100000000 --seq_len 512 
+      --target_blocks 23 24 25 --layers_per_pass 3 --batch_size 20 
+      --sample_labels --fsdp --world_size 8
+    deps:
+    - path: bergson/
+      hash: md5
+      md5: 97b19afec033f7f716a8dea5e49e91f2.dir
+      size: 2676294
+      nfiles: 30
+    - path: memorization_kfac/data/collect_kfac_bergson.py
+      hash: md5
+      md5: c95fcd18222d5dd0dcd8716bb28ddfb0
+      size: 6650
+    outs:
+    - path: out/collect_kfac/bergson/7b
+      hash: md5
+      md5: d03e617aa57bc717f6552f7d56386863.dir
+      size: 11555881617
+      nfiles: 45
+  baseline_cache:
+    cmd: MEM_KFAC_CACHE_DIR=out/baseline_cache/7b/cache 
+      MEM_EVAL_PT_CACHE=out/prepare_pile10k_cache python 
+      memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b 
+      --results-tag baseline_7b --results-dir metrics_out/baseline_cache/7b 
+      --only-baseline --baseline out/baseline_cache/7b --perplexity --bs 96
+    deps:
+    - path: memorization_kfac/data/baseline_generator.py
+      hash: md5
+      md5: 597d67f3631eeb45059dcf12014ad606
+      size: 11894
+    - path: memorization_kfac/data/pile10k_None.txt
+      hash: md5
+      md5: 1574c0e28ff0313dc8ee4b2342c6943a
+      size: 61084719
+    - path: memorization_kfac/evaluations/eval_mem_kfac.py
+      hash: md5
+      md5: a377f794345ce0b028963769e69a2003
+      size: 33872
+    - path: memorization_kfac/metrics/
+      hash: md5
+      md5: 09bafa932719557855e7534ecc6a4322.dir
+      size: 76907
+      nfiles: 7
+    - path: out/prepare_pile10k_cache
+      hash: md5
+      md5: 284f1404d5ce6e7aeefbbeab013234bc
+      size: 118745867
+    outs:
+    - path: metrics_out/baseline_cache/7b/baseline_eval_log_7b_baseline_7b.jsonl
+      hash: md5
+      md5: db8bdfbca9eaf61e4107b848be7ba451
+      size: 1048
+    - path: out/baseline_cache/7b
+      hash: md5
+      md5: cca959fdd82551b9d4a03d0e1d827ae5.dir
+      size: 7979400
+      nfiles: 1
+  eval_kfac:
+    cmd: "MEM_KFAC_FACTORS_ROOT=out/collect_kfac/bergson/7b MEM_KFAC_CACHE_DIR=out/eval_kfac/bergson/7b/cache
+      MEM_EVAL_PT_CACHE=out/prepare_pile10k_cache MEM_EVAL_EDITED_ROOT=out/eval_kfac/bergson/7b/model
+      python memorization_kfac/evaluations/eval_mem_kfac.py --model-size 7b --results-tag
+      7b --results-dir metrics_out/eval_kfac/bergson/7b --use-cache --refresh-cache
+      --perplexity --skip-baseline --baseline out/baseline_cache/7b --bs 96 --bergson-factors
+      out/collect_kfac/bergson/7b --layers-json '{\"23\": {\"gate\": 0.5, \"up\":
+      0.5, \"down\": 1.0}, \"24\": {\"gate\": 0.5, \"up\": 0.5, \"down\": 1.0}, \"\
+      25\": {\"gate\": 0.5, \"up\": 0.5, \"down\": 1.0}}' --eigenvalue-corrections
+      --weight-coefficients"
+    deps:
+    - path: memorization_kfac/data/pile10k_None.txt
+      hash: md5
+      md5: 1574c0e28ff0313dc8ee4b2342c6943a
+      size: 61084719
+    - path: memorization_kfac/evaluations/eval_mem_kfac.py
+      hash: md5
+      md5: a377f794345ce0b028963769e69a2003
+      size: 33872
+    - path: memorization_kfac/kfac_treatment_pairwise.py
+      hash: md5
+      md5: 44e666634b30f9ce1fcc0d5ddc0c5f8a
+      size: 28387
+    - path: memorization_kfac/metrics/
+      hash: md5
+      md5: 09bafa932719557855e7534ecc6a4322.dir
+      size: 76907
+      nfiles: 7
+    - path: out/baseline_cache/7b
+      hash: md5
+      md5: cca959fdd82551b9d4a03d0e1d827ae5.dir
+      size: 7979400
+      nfiles: 1
+    - path: out/collect_kfac/bergson/7b
+      hash: md5
+      md5: d03e617aa57bc717f6552f7d56386863.dir
+      size: 11555881617
+      nfiles: 45
+    - path: out/prepare_pile10k_cache
+      hash: md5
+      md5: 284f1404d5ce6e7aeefbbeab013234bc
+      size: 118745867
+    outs:
+    - path: metrics_out/eval_kfac/bergson/7b/kfac_eval_log_7b_7b.jsonl
+      hash: md5
+      md5: 7c12eff0421fd538d7899a9f5f54ff78
+      size: 1214
+    - path: out/eval_kfac/bergson/7b
+      hash: md5
+      md5: eb8cea8f82b8796a5ec69892251b5eb2.dir
+      size: 15148056441
+      nfiles: 17
+  benchmark:
+    cmd: PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uvx --python 3.11 
+      --from "ai2-olmes[gpu] @ 
+      git+https://github.com/allenai/olmes.git@f122a7bad99551ffb3f5feec14169af794926f6b"
+      olmes --model out/eval_kfac/bergson/7b/model --task winogrande::olmes 
+      --batch-size 128 --output-dir out/benchmark/bergson/7b/winogrande::olmes 
+      && python memorization_kfac/evaluations/extract_olmes_metrics.py 
+      out/benchmark/bergson/7b/winogrande::olmes/metrics.json 
+      metrics_out/benchmark/bergson/7b/winogrande::olmes.json
+    deps:
+    - path: out/eval_kfac/bergson/7b
+      hash: md5
+      md5: eb8cea8f82b8796a5ec69892251b5eb2.dir
+      size: 15148056441
+      nfiles: 17
+    outs:
+    - path: metrics_out/benchmark/bergson/7b/winogrande::olmes.json
+      hash: md5
+      md5: 033d2417011243a9d8514135068292eb
+      size: 129
+    - path: out/benchmark/bergson/7b/winogrande::olmes
+      hash: md5
+      md5: ee18d86b724c7f4a947d8bae82d2784f.dir
+      size: 9059537
+      nfiles: 10
