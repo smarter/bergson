@@ -580,8 +580,8 @@ class KFACTreatmentPairwise(KFACTreatment):
                 # Step 3: Apply weight coefficient weighting if requested
                 if use_weight_coefficients:
                     if "linear" in wc_opts:
-                        C_weight = C  # Linear: C_ij
-                        weight_type = "C"
+                        C_weight = C.abs()  # |C_ij|
+                        weight_type = "|C|"
                     else:
                         C_weight = C ** 2  # Squared: C_ij^2
                         weight_type = "C²"
