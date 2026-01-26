@@ -525,7 +525,8 @@ class KFACTreatmentPairwise(KFACTreatment):
     def apply_kfac_by_product(self,
                               variance_ratio: Union[float,
                                                     Dict[str, float]],
-                              use_weight_coefficients: bool = False):
+                              use_weight_coefficients: bool = False,
+                              wc_opts: Optional[set] = None):
         """
         Project each registered layer onto the span of the largest
         importance scores until the chosen fraction of total mass is kept.
@@ -537,7 +538,12 @@ class KFACTreatmentPairwise(KFACTreatment):
             If True, weight importance by C_ij^2 (squared weight coefficients
             in the eigenbasis). This minimizes second-order loss impact rather
             than just curvature.
+        wc_opts
+            Set of weight coefficient options (requires use_weight_coefficients):
+            - 'linear': use C_ij instead of C_ij^2
+            - 'grad-cov': add -(cov_G in eigenbasis)[i,i] * C_ij to importance
         """
+        wc_opts = set(wc_opts or [])
         # Build a per‑layer ratio map
         if isinstance(variance_ratio, float):
             ratio_map = {name: variance_ratio for name in self.layer_names}
@@ -563,29 +569,38 @@ class KFACTreatmentPairwise(KFACTreatment):
                     # Outer product of eigenvalues (standard K-FAC)
                     importance = eva_G.unsqueeze(1) * eva_A.unsqueeze(0)  # [m, n]
 
-                # Step 2: Apply weight coefficient weighting if requested
-                if use_weight_coefficients:
+                # Step 2: Compute weight coefficients C if needed
+                C = None
+                if use_weight_coefficients or "grad-cov" in wc_opts:
                     Ug = info['evc_G'].to(self.device)
                     Ua = info['evc_A'].to(self.device)
                     W = info['W_orig'].to(self.device).float()
                     C = Ug.T @ W @ Ua  # [m, n]
-                    C_sq = C ** 2
-                    # Diagnostic: show how concentrated C² is
-                    C_sq_flat = C_sq.flatten()
-                    total_C_sq = C_sq_flat.sum()
-                    sorted_C_sq = C_sq_flat.sort(descending=True).values
-                    cumsum_C_sq = sorted_C_sq.cumsum(0) / total_C_sq
-                    top1pct = (cumsum_C_sq <= 0.01).sum().item()
-                    top10pct = (cumsum_C_sq <= 0.10).sum().item()
-                    top40pct = (cumsum_C_sq <= 0.40).sum().item()
-                    print(f"  C² concentration: top {top1pct} pairs (of {C_sq_flat.numel()}) = 1% mass, "
+
+                # Step 3: Apply weight coefficient weighting if requested
+                if use_weight_coefficients:
+                    if "linear" in wc_opts:
+                        C_weight = C  # Linear: C_ij
+                        weight_type = "C"
+                    else:
+                        C_weight = C ** 2  # Squared: C_ij^2
+                        weight_type = "C²"
+                    # Diagnostic: show how concentrated the weight is
+                    C_weight_flat = C_weight.flatten()
+                    total_C_weight = C_weight_flat.abs().sum()
+                    sorted_C_weight = C_weight_flat.abs().sort(descending=True).values
+                    cumsum_C_weight = sorted_C_weight.cumsum(0) / total_C_weight
+                    top1pct = (cumsum_C_weight <= 0.01).sum().item()
+                    top10pct = (cumsum_C_weight <= 0.10).sum().item()
+                    top40pct = (cumsum_C_weight <= 0.40).sum().item()
+                    print(f"  {weight_type} concentration: top {top1pct} pairs (of {C_weight_flat.numel()}) = 1% mass, "
                           f"top {top10pct} = 10%, top {top40pct} = 40%")
-                    importance = C_sq * importance
+                    importance = C_weight * importance
                     # Also show concentration of final importance
                     imp_flat = importance.flatten()
                     n_pairs = imp_flat.numel()
-                    total_imp = imp_flat.sum()
-                    sorted_imp = imp_flat.sort(descending=True).values
+                    total_imp = imp_flat.abs().sum()
+                    sorted_imp = imp_flat.abs().sort(descending=True).values
                     cumsum_imp = sorted_imp.cumsum(0) / total_imp
                     # What mass % do we get at 5%, 10%, and 15% of pairs?
                     idx_5pct = int(n_pairs * 0.05)
@@ -594,21 +609,30 @@ class KFACTreatmentPairwise(KFACTreatment):
                     mass_at_5pct = cumsum_imp[idx_5pct - 1].item() if idx_5pct > 0 else 0
                     mass_at_10pct = cumsum_imp[idx_10pct - 1].item() if idx_10pct > 0 else 0
                     mass_at_15pct = cumsum_imp[idx_15pct - 1].item() if idx_15pct > 0 else 0
-                    print(f"  C²×Λ: 5% pairs = {mass_at_5pct:.1%}, 10% = {mass_at_10pct:.1%}, 15% = {mass_at_15pct:.1%}")
-                    print(f"  Using weight coefficients for pair selection")
+                    print(f"  {weight_type}×Λ: 5% pairs = {mass_at_5pct:.1%}, 10% = {mass_at_10pct:.1%}, 15% = {mass_at_15pct:.1%}")
+                    print(f"  Using weight coefficients ({weight_type}) for pair selection")
 
-                # Step 3: Select pairs
-                if use_weight_coefficients or 'lambda_correction' in info:
+                # Step 4: Apply grad_cov correction if requested
+                # This adds -(cov_G in eigenbasis)[i,i] * C[i,j] = -eva_G[i] * C[i,j]
+                if "grad-cov" in wc_opts:
+                    # eva_G[i] * C[i,j] for each (i,j) pair
+                    # eva_G is [m], C is [m, n], so eva_G.unsqueeze(1) * C gives [m, n]
+                    grad_cov_term = eva_G.unsqueeze(1) * C  # [m, n]
+                    importance = importance - grad_cov_term
+                    print(f"  Applied grad_cov correction: -eva_G[i] * C[i,j]")
+
+                # Step 5: Select pairs
+                if use_weight_coefficients or "grad-cov" in wc_opts or 'lambda_correction' in info:
                     # Non-separable: use general flatten-sort selection
                     pairs = self._top_pairs_by_correction(importance, rho)
                 else:
                     # Separable: use efficient heap-based selection
                     pairs = self._top_pairs_by_product(eva_G, eva_A, rho)
 
-                # Step 4: build projection
+                # Step 6: build projection
                 W_proj = self._project_weight_pairs(info, pairs)
 
-                # Step 5: write back
+                # Step 7: write back
                 layer = self._get_layer_by_name(layer_name)
                 layer.weight.copy_(W_proj.to(layer.weight.dtype))
 

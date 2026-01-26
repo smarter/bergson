@@ -213,6 +213,7 @@ def load_bergson_kfac_info(
     device: Optional[str] = None,
     keep_on_cpu: bool = False,
     use_eigenvalue_corrections: bool = False,
+    include_cov_G: bool = False,
 ) -> Dict[str, Dict]:
     """
     Load K-FAC info from bergson format with pre-computed eigenvectors.
@@ -227,9 +228,10 @@ def load_bergson_kfac_info(
         device: Device to use for computations
         keep_on_cpu: If True, keep eigenvectors on CPU
         use_eigenvalue_corrections: If True, load pre-computed eigenvalue corrections
+        include_cov_G: If True, include cov_G (gradient covariance in eigenbasis) in output
 
     Returns:
-        Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G, lambda_correction (optional)}
+        Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G, lambda_correction (optional), cov_G (optional)}
     """
     bergson_path = Path(bergson_path)
     influence_path = bergson_path / "influence_results"
@@ -320,6 +322,13 @@ def load_bergson_kfac_info(
             'evc_G': evc_G,
         }
 
+        if include_cov_G:
+            # Store cov_G in eigenbasis for grad_cov_correction
+            # cov_G_eigenbasis[i,j] = evc_G[:,i]^T @ cov_G @ evc_G[:,j]
+            # Since cov_G = evc_G @ diag(eva_G) @ evc_G^T, the eigenbasis form is diagonal
+            # But we store the full cov_G for flexibility (in case off-diagonal terms are needed)
+            layer_info['cov_G'] = cov_G
+
         if lambda_corrections is not None and bergson_key in lambda_corrections:
             # Eigenvalue corrections are stored in bergson's original order (ascending from eigh)
             # We need to reorder to match our descending eigenvector order
@@ -349,7 +358,8 @@ def apply_kfac_to_layer(model,
                        use_cache: bool = True,
                        refresh_cache: bool = False,
                        use_eigenvalue_corrections: bool = False,
-                       use_weight_coefficients: bool = False) -> None:
+                       use_weight_coefficients: bool = False,
+                       wc_opts: Optional[List[str]] = None) -> None:
     """Apply K-FAC to a single layer's MLP projections.
 
     Args:
@@ -364,7 +374,11 @@ def apply_kfac_to_layer(model,
         refresh_cache: Whether to recompute cached weights
         use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
         use_weight_coefficients: Whether to weight pair importance by C_ij^2 (squared weight coefficients)
+        wc_opts: Weight coefficient options list. Valid values:
+            - 'linear': Use C_ij instead of C_ij^2
+            - 'grad-cov': Add -(cov_G eigenbasis)[i,i] * C_ij to importance (bergson only)
     """
+    wc_opts = set(wc_opts or [])
     if bergson_path is None and model_size is None:
         raise ValueError("Either model_size or bergson_path must be provided")
 
@@ -380,11 +394,13 @@ def apply_kfac_to_layer(model,
             print(f"  K-FAC {proj_name}_proj (ρ={variance:.3f}): skipping (ρ≈1.0)")
             continue
 
+        wc_opts_str = "_".join(sorted(wc_opts)) if wc_opts else ""
         cache_path = CACHE_DIR / (
             f"{_sanitize_filename_component(model_name)}__L{layer_idx}__{proj_name}"
             f"__rho{_rho_to_str(variance)}"
             f"{'__evcorr' if use_eigenvalue_corrections else ''}"
             f"{'__wcoef' if use_weight_coefficients else ''}"
+            f"{'__' + wc_opts_str if wc_opts_str else ''}"
             f"__{proj_layer.weight.dtype.__str__()}.pt"
         )
 
@@ -405,6 +421,7 @@ def apply_kfac_to_layer(model,
                 model=model,
                 device=proj_layer.weight.device,
                 use_eigenvalue_corrections=use_eigenvalue_corrections,
+                include_cov_G="grad-cov" in wc_opts,
             )
             kfac = KFACTreatmentPairwise(
                 model,
@@ -422,8 +439,11 @@ def apply_kfac_to_layer(model,
                 device=proj_layer.weight.device,
             )
 
-        kfac.apply_kfac_by_product(variance_ratio=variance,
-                                   use_weight_coefficients=use_weight_coefficients)
+        kfac.apply_kfac_by_product(
+            variance_ratio=variance,
+            use_weight_coefficients=use_weight_coefficients,
+            wc_opts=wc_opts,
+        )
 
         stats = kfac.compression_stats.get(layer_name, None)
         if stats is not None:
@@ -474,6 +494,10 @@ def main():
     parser.add_argument("--weight-coefficients", action="store_true",
                        help="Weight pair importance by C_ij^2 (squared weight coefficients). "
                             "Minimizes second-order loss impact rather than just curvature.")
+    parser.add_argument("--wc-opts", type=str, nargs="*", default=[],
+                       help="Weight coefficient options (requires --weight-coefficients). "
+                            "Values: 'linear' (use C_ij instead of C_ij^2), "
+                            "'grad-cov' (add -eva_G[i]*C_ij term, requires --bergson-factors).")
 
     # Evaluation settings
     parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
@@ -507,6 +531,15 @@ def main():
         parser.error("--eigenvalue-corrections requires --bergson-factors")
     if args.only_baseline and args.skip_baseline:
         parser.error("--only-baseline and --skip-baseline are mutually exclusive")
+    # Parse and validate --wc-opts
+    wc_opts_valid = {"linear", "grad-cov"}
+    for opt in args.wc_opts:
+        if opt not in wc_opts_valid:
+            parser.error(f"Invalid --wc-opts value: '{opt}'. Valid values: {wc_opts_valid}")
+    if args.wc_opts and not args.weight_coefficients:
+        parser.error("--wc-opts requires --weight-coefficients")
+    if "grad-cov" in args.wc_opts and not args.bergson_factors:
+        parser.error("--wc-opts grad-cov requires --bergson-factors")
 
     # Suppress HF logging
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
@@ -627,6 +660,7 @@ def main():
                 refresh_cache=args.refresh_cache,
                 use_eigenvalue_corrections=args.eigenvalue_corrections,
                 use_weight_coefficients=args.weight_coefficients,
+                wc_opts=args.wc_opts,
             )
 
     # POST-K-FAC EVALUATION (skipped when --only-baseline)
