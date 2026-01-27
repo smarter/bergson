@@ -220,3 +220,86 @@ stages:
 
       Output: metrics.json contains primary_score and detailed metrics (acc_raw, etc.)
       View with: dvc metrics show
+
+  # =============================================================================
+  # Arithmetic Dataset Generation
+  # =============================================================================
+  # Generate arithmetic expressions for fine-tuning to recover math abilities.
+  #
+  # Usage:
+  #   dvc exp run generate_arithmetic
+  #   dvc exp run generate_arithmetic -S arithmetic.max_digits=3
+
+  generate_arithmetic:
+    cmd: >-
+      python memorization_kfac/data/generate_arithmetic.py
+      --output ${out_dir.generate_arithmetic}/arithmetic.jsonl
+      --operations "${arithmetic.operations}"
+      --num-operands ${arithmetic.num_operands}
+      --min-digits ${arithmetic.min_digits}
+      --max-digits ${arithmetic.max_digits}
+      --total-samples ${arithmetic.total_samples}
+      --format ${arithmetic.format}
+      --division-mode ${arithmetic.division_mode}
+      --seed ${arithmetic.seed}
+      ${computed.allow_negative_flag}
+    deps:
+      - memorization_kfac/data/generate_arithmetic.py
+    outs:
+      - ${out_dir.generate_arithmetic}/arithmetic.jsonl
+    params:
+      - arithmetic
+    desc: |
+      Generate arithmetic dataset for fine-tuning.
+
+      Creates JSONL file with arithmetic expressions like:
+      - "20 + 80 = 100"
+      - "15 * 3 = 45"
+      - "(2 + 3) * 4 = 20"
+
+      Usage:
+        dvc exp run generate_arithmetic -S arithmetic.max_digits=3
+
+  # =============================================================================
+  # Fine-tuning on Arithmetic Data
+  # =============================================================================
+  # Fine-tune edited model using LoRA to recover math abilities.
+  #
+  # Usage:
+  #   dvc exp run finetune_arithmetic -S model=7b -S method=bergson
+
+  finetune_arithmetic:
+    cmd: >-
+      python memorization_kfac/finetuning/finetune_arithmetic.py
+      --model-path ${out_dir.eval_kfac}/model
+      --data-path ${out_dir.generate_arithmetic}/arithmetic.jsonl
+      --output-dir ${out_dir.finetune_arithmetic}
+      --lora-r ${finetune.lora_r}
+      --lora-alpha ${finetune.lora_alpha}
+      --lora-dropout ${finetune.lora_dropout}
+      --learning-rate ${finetune.learning_rate}
+      --num-epochs ${finetune.num_epochs}
+      --batch-size ${finetune.batch_size}
+      --gradient-accumulation-steps ${finetune.gradient_accumulation_steps}
+      --max-seq-length ${finetune.max_seq_length}
+      --warmup-steps ${finetune.warmup_steps}
+      --dtype ${finetune.dtype}
+      ${computed.load_in_4bit_flag}
+      ${computed.merge_lora_flag}
+    deps:
+      - memorization_kfac/finetuning/finetune_arithmetic.py
+      - ${out_dir.generate_arithmetic}/arithmetic.jsonl
+      - ${out_dir.eval_kfac}/model
+    outs:
+      - ${out_dir.finetune_arithmetic}
+    params:
+      - finetune
+    desc: |
+      Fine-tune edited model on arithmetic data using LoRA.
+
+      Uses unsloth for efficient LoRA fine-tuning to recover math
+      abilities lost during memorization removal.
+
+      Usage:
+        dvc exp run finetune_arithmetic -S model=7b -S method=bergson
+        dvc exp run finetune_arithmetic -S finetune.num_epochs=2

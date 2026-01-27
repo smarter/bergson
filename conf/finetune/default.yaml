@@ -1,0 +1,15 @@
+# @package _global_
+finetune:
+  # model_path is wired via DVC to ${out_dir.eval_kfac}/model
+  lora_r: 16
+  lora_alpha: 16
+  lora_dropout: 0.0
+  learning_rate: 2e-4
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  max_seq_length: 512
+  warmup_steps: 5
+  dtype: "bfloat16"
+  load_in_4bit: false
+  merge_lora: true

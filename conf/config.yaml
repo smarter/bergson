@@ -7,6 +7,8 @@ defaults:
   - model: 7b # loads model/7b.yaml
   - method: bergson
   - benchmark: gsm8k
+  - arithmetic: default
+  - finetune: default
   - model_method: ${model}_${method} # loads model_method/7b_bergson.yaml
   - _self_
 
@@ -39,6 +41,8 @@ out_dir:
   eval_kfac: "out/eval_kfac/${out_suffix}"
   plot_figure2: "out/plot_figure2/${out_suffix}"
   benchmark: "out/benchmark/${out_suffix}"
+  generate_arithmetic: "out/generate_arithmetic"
+  finetune_arithmetic: "out/finetune_arithmetic/${out_suffix}"
 
 computed:
   # Flags that cannot be represented as "key: value" because they don't have a
@@ -48,3 +52,8 @@ computed:
   sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
   fsdp_flag: "${if:${collect_kfac.fsdp},'--fsdp',''}"
   world_size_flag: "${if_set:${collect_kfac.world_size},'--world_size'}"
+  # Arithmetic generation flags
+  allow_negative_flag: "${if:${arithmetic.allow_negative},'--allow-negative','--no-negative'}"
+  # Fine-tuning flags
+  load_in_4bit_flag: "${if:${finetune.load_in_4bit},'--load-in-4bit',''}"
+  merge_lora_flag: "${if:${finetune.merge_lora},'--merge-lora',''}"

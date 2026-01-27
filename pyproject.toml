@@ -71,3 +71,7 @@ dev = [
     "rapidfuzz>=3.14.3",
     "zstandard>=0.25.0",
 ]
+finetune = [
+    "unsloth",
+    "trl>=0.7.0",
+]
