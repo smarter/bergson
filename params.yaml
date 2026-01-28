@@ -33,7 +33,7 @@ collect_kfac:
   extra_dep: bergson/
   fsdp: true
   world_size: 8
-  bf16_batch_size: 32
+  bf16_batch_size: 40
   sample_labels: true
   args:
     device: cuda
@@ -46,24 +46,53 @@ collect_kfac:
     - '24'
     - '25'
     layers_per_pass: 3
-    batch_size: 32
+    batch_size: 40
 benchmark:
   args:
     task: gsm8k::olmes
     batch-size: 28
+arithmetic:
+  operations: +,-,*
+  num_operands: 3
+  min_digits: 1
+  max_digits: 3
+  total_samples: 100000
+  format: equation
+  allow_negative: true
+  division_mode: integer
+  seed: 42
+finetune:
+  lora_r: 16
+  lora_alpha: 16
+  lora_dropout: 0.0
+  learning_rate: 0.0002
+  num_epochs: 4
+  batch_size: 64
+  gradient_accumulation_steps: 4
+  max_seq_length: 512
+  warmup_steps: 5
+  dtype: bfloat16
+  load_in_4bit: false
+  merge_lora: true
 model_method:
   gate_up_mass: 0.4
 out_suffix: bergson/7b
 out_dir:
   prepare_pile10k: memorization_kfac/data/pile10k_None.txt
   prepare_pile10k_cache: out/prepare_pile10k_cache
+  baseline_cache: out/baseline_cache/7b
   collect_kfac: out/collect_kfac/bergson/7b
   eval_kfac: out/eval_kfac/bergson/7b
   plot_figure2: out/plot_figure2/bergson/7b
   benchmark: out/benchmark/bergson/7b
+  generate_arithmetic: out/generate_arithmetic
+  finetune_arithmetic: out/finetune_arithmetic/bergson/7b
 computed:
   eigenvalue_corrections_flag: --eigenvalue-corrections
   weight_coefficients_flag: ''
   sample_labels_flag: --sample_labels
   fsdp_flag: --fsdp
   world_size_flag: --world_size 8
+  allow_negative_flag: --allow-negative
+  load_in_4bit_flag: ''
+  merge_lora_flag: --merge-lora

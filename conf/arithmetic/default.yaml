@@ -1,10 +1,10 @@
 # @package _global_
 arithmetic:
   operations: "+,-,*"
-  num_operands: 2
+  num_operands: 3
   min_digits: 1
-  max_digits: 2
-  total_samples: 10000
+  max_digits: 3
+  total_samples: 100000
   format: "equation"
   allow_negative: true
   division_mode: "integer"
