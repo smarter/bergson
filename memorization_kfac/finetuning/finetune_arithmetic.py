@@ -123,6 +123,7 @@ def main():
         max_seq_length=args.max_seq_length,
         dataset_text_field="text",
         packing=False,
+        padding_free=False,
     )
 
     # Create trainer
