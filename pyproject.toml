@@ -21,6 +21,8 @@ dependencies = [
     "simple-parsing",
     "torch",
     "transformers>=4.57.1",
+    "trl>=0.20.0",
+    "unsloth>=2026.1.4",
 ]
 version = "0.0.1"
 [project.optional-dependencies]
