@@ -5,13 +5,13 @@ Fine-tune a model on arithmetic data using unsloth and LoRA.
 This script fine-tunes an edited model (or base model) on arithmetic
 expressions to recover math abilities lost during memorization removal.
 """
+import unsloth  # noqa: F401 - must be imported first for patching
 import argparse
 import json
 from pathlib import Path
 
 from datasets import Dataset
-from transformers import TrainingArguments
-from trl import SFTTrainer
+from trl import SFTConfig, SFTTrainer
 from unsloth import FastLanguageModel
 
 
@@ -105,8 +105,8 @@ def main():
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Training arguments
-    training_args = TrainingArguments(
+    # Training config using SFTConfig (newer trl API)
+    sft_config = SFTConfig(
         output_dir=str(args.output_dir),
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
@@ -119,15 +119,18 @@ def main():
         save_strategy="epoch",
         optim="adamw_8bit",
         seed=42,
+        # SFT-specific settings
+        max_seq_length=args.max_seq_length,
+        dataset_text_field="text",
+        packing=False,
     )
 
     # Create trainer
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         train_dataset=dataset,
-        args=training_args,
-        max_seq_length=args.max_seq_length,
+        args=sft_config,
     )
 
     print("Starting training...")
