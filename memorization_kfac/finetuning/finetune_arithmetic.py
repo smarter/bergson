@@ -99,6 +99,23 @@ def main():
         model.resize_token_embeddings(len(tokenizer))
         print(f"  Added separate pad token: {tokenizer.pad_token}")
 
+    # Set chat template if not present (needed for base models like OLMo-2)
+    # Template from: https://huggingface.co/allenai/OLMo-2-1124-7B-SFT
+    if tokenizer.chat_template is None:
+        tokenizer.chat_template = (
+            "{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'system' %}{{ '<|system|>\\n' + message['content'] + '\\n' }}"
+            "{% elif message['role'] == 'user' %}{{ '<|user|>\\n' + message['content'] + '\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{% if not loop.last %}{{ '<|assistant|>\\n' + message['content'] + eos_token + '\\n' }}"
+            "{% else %}{{ '<|assistant|>\\n' + message['content'] + eos_token }}{% endif %}"
+            "{% endif %}"
+            "{% if loop.last and add_generation_prompt %}{{ '<|assistant|>\\n' }}{% endif %}"
+            "{% endfor %}"
+        )
+        print("  Set OLMo-2 chat template")
+
     print("Applying LoRA...")
     model = FastLanguageModel.get_peft_model(
         model,
