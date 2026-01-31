@@ -5,7 +5,7 @@ arithmetic:
   min_digits: 1
   max_digits: 2
   total_samples: 10000
-  format: "equation"
+  format: "chat"
   allow_negative: true
   division_mode: "integer"
   seed: 42

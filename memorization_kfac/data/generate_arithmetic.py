@@ -120,7 +120,7 @@ def generate_ternary_expression(
     return expression, result
 
 
-def format_output(expression: str, result: int | float, output_format: str) -> str:
+def format_output(expression: str, result: int | float, output_format: str) -> str | list[dict[str, str]]:
     """Format the expression and result according to the output format."""
     # Format result nicely
     if isinstance(result, float):
@@ -134,6 +134,11 @@ def format_output(expression: str, result: int | float, output_format: str) -> s
         return f"Q: What is {expression}?\nA: {result_str}"
     elif output_format == "instruct":
         return f"Calculate: {expression}\nAnswer: {result_str}"
+    elif output_format == "chat":
+        return [
+            {"role": "user", "content": f"Calculate: {expression}"},
+            {"role": "assistant", "content": result_str},
+        ]
     else:
         raise ValueError(f"Unknown output format: {output_format}")
 
@@ -162,15 +167,16 @@ def generate_all_binary_expressions(config: ArithmeticConfig, rng: random.Random
     return expressions
 
 
-def generate_sampled_expressions(config: ArithmeticConfig, rng: random.Random) -> list[str]:
+def generate_sampled_expressions(config: ArithmeticConfig, rng: random.Random) -> list:
     """Generate sampled expressions using random sampling."""
-    expressions: set[str] = set()
+    seen_expressions: set[str] = set()  # Track unique expressions for deduplication
+    outputs: list = []  # Store formatted outputs (may be strings or lists for chat)
     assert config.total_samples is not None
     target_count = config.total_samples
     max_attempts = target_count * 100  # Prevent infinite loops
     attempts = 0
 
-    while len(expressions) < target_count and attempts < max_attempts:
+    while len(outputs) < target_count and attempts < max_attempts:
         attempts += 1
 
         if config.num_operands == 2:
@@ -181,7 +187,9 @@ def generate_sampled_expressions(config: ArithmeticConfig, rng: random.Random) -
             result = generate_binary_expression((a, b), op, config.division_mode)
             if result is not None:
                 expr, res = result
-                expressions.add(format_output(expr, res, config.output_format))
+                if expr not in seen_expressions:
+                    seen_expressions.add(expr)
+                    outputs.append(format_output(expr, res, config.output_format))
 
         elif config.num_operands == 3:
             a = random_number(config.min_digits, config.max_digits, config.allow_negative, rng)
@@ -195,12 +203,14 @@ def generate_sampled_expressions(config: ArithmeticConfig, rng: random.Random) -
             result = generate_ternary_expression((a, b, c), (op1, op2), use_parens, paren_position, config.division_mode)
             if result is not None:
                 expr, res = result
-                expressions.add(format_output(expr, res, config.output_format))
+                if expr not in seen_expressions:
+                    seen_expressions.add(expr)
+                    outputs.append(format_output(expr, res, config.output_format))
 
-    return list(expressions)
+    return outputs
 
 
-def generate_dataset(config: ArithmeticConfig) -> list[str]:
+def generate_dataset(config: ArithmeticConfig) -> list:
     """Generate arithmetic dataset according to config."""
     rng = random.Random(config.seed)
 
@@ -230,7 +240,7 @@ def main():
     parser.add_argument("--max-digits", type=int, default=3, help="Maximum number of digits")
     parser.add_argument("--sample-percentage", type=float, default=1.0, help="Percentage of space to sample")
     parser.add_argument("--total-samples", type=int, default=None, help="Total number of samples to generate")
-    parser.add_argument("--format", type=str, default="equation", choices=["equation", "qa", "instruct"])
+    parser.add_argument("--format", type=str, default="equation", choices=["equation", "qa", "instruct", "chat"])
     parser.add_argument("--division-mode", type=str, default="integer", choices=["integer", "exact", "rounded"])
     parser.add_argument("--allow-negative", action="store_true", default=True, help="Allow negative numbers")
     parser.add_argument("--no-negative", action="store_true", help="Disable negative numbers")
@@ -267,7 +277,10 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w") as f:
         for expr in expressions:
-            f.write(json.dumps({"text": expr}) + "\n")
+            if config.output_format == "chat":
+                f.write(json.dumps({"messages": expr}) + "\n")
+            else:
+                f.write(json.dumps({"text": expr}) + "\n")
 
     print(f"Generated {len(expressions)} expressions to {args.output}")
 

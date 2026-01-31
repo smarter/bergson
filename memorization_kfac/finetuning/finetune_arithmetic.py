@@ -15,14 +15,25 @@ from trl import SFTConfig, SFTTrainer
 from unsloth import FastLanguageModel
 
 
-def load_jsonl_dataset(path: Path) -> Dataset:
-    """Load a JSONL dataset with 'text' field."""
-    texts = []
+def load_jsonl_dataset(path: Path) -> tuple[Dataset, str]:
+    """Load a JSONL dataset, auto-detecting format (text or messages).
+
+    Returns:
+        Tuple of (dataset, format) where format is "text" or "messages".
+    """
+    records = []
     with open(path) as f:
         for line in f:
-            data = json.loads(line)
-            texts.append(data["text"])
-    return Dataset.from_dict({"text": texts})
+            records.append(json.loads(line))
+
+    # Detect format from first record
+    if not records:
+        raise ValueError(f"Empty dataset: {path}")
+
+    if "messages" in records[0]:
+        return Dataset.from_dict({"messages": [r["messages"] for r in records]}), "messages"
+    else:
+        return Dataset.from_dict({"text": [r["text"] for r in records]}), "text"
 
 
 def main():
@@ -78,6 +89,16 @@ def main():
         load_in_4bit=args.load_in_4bit,
     )
 
+    # Fix tokenizer to prevent EOS token issues during training.
+    # If pad_token == eos_token, the model learns to ignore EOS, causing repetition.
+    # See: https://github.com/huggingface/trl/issues/1283
+    tokenizer.padding_side = "right"
+    if tokenizer.pad_token == tokenizer.eos_token or tokenizer.pad_token is None:
+        # Add a separate pad token to avoid masking EOS during training
+        tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+        model.resize_token_embeddings(len(tokenizer))
+        print(f"  Added separate pad token: {tokenizer.pad_token}")
+
     print("Applying LoRA...")
     model = FastLanguageModel.get_peft_model(
         model,
@@ -99,8 +120,8 @@ def main():
     )
 
     print(f"Loading dataset from {args.data_path}...")
-    dataset = load_jsonl_dataset(args.data_path)
-    print(f"  Loaded {len(dataset)} examples")
+    dataset, data_format = load_jsonl_dataset(args.data_path)
+    print(f"  Loaded {len(dataset)} examples (format: {data_format})")
 
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -121,7 +142,8 @@ def main():
         seed=42,
         # SFT-specific settings
         max_seq_length=args.max_seq_length,
-        dataset_text_field="text",
+        # For chat format, don't set dataset_text_field - SFTTrainer will use messages
+        dataset_text_field="text" if data_format == "text" else None,
         packing=False,
     )
 
