@@ -142,10 +142,16 @@ def main():
         seed=42,
         # SFT-specific settings
         max_seq_length=args.max_seq_length,
-        # For chat format, don't set dataset_text_field - SFTTrainer will use messages
         dataset_text_field="text" if data_format == "text" else None,
         packing=False,
     )
+
+    # For chat format, create a formatting function that applies the chat template
+    formatting_func = None
+    if data_format == "messages":
+
+        def formatting_func(example):
+            return tokenizer.apply_chat_template(example["messages"], tokenize=False)
 
     # Create trainer
     trainer = SFTTrainer(
@@ -153,6 +159,7 @@ def main():
         processing_class=tokenizer,
         train_dataset=dataset,
         args=sft_config,
+        formatting_func=formatting_func,
     )
 
     print("Starting training...")
