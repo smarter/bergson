@@ -167,8 +167,12 @@ def main():
     formatting_func = None
     if data_format == "messages":
 
-        def formatting_func(example):
-            return tokenizer.apply_chat_template(example["messages"], tokenize=False)
+        def formatting_func(examples):
+            # formatting_func receives batched examples and must return a list of strings
+            return [
+                tokenizer.apply_chat_template(msgs, tokenize=False)
+                for msgs in examples["messages"]
+            ]
 
     # Create trainer
     trainer = SFTTrainer(
