@@ -1,0 +1,6 @@
+# @package _global_
+model_method:
+  gate_up_mass: 0.60
+
+collect_kfac:
+  bf16_batch_size: 24

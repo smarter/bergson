@@ -1,0 +1,222 @@
+vars:
+  - olmes_commit: "f122a7bad99551ffb3f5feec14169af794926f6b"
+
+stages:
+  # =============================================================================
+  # Data Preparation
+  # =============================================================================
+
+  prepare_pile10k:
+    cmd:
+      - python memorization_kfac/data/prepare_pile10k.py
+    deps:
+      - memorization_kfac/data/prepare_pile10k.py
+    outs:
+      - ${out_dir.prepare_pile10k}
+    desc: |
+      Download and prepare pile10k dataset from HuggingFace (NeelNanda/pile-10k).
+      This dataset is used for nDCG evaluation in the validation stages.
+
+  prepare_pile10k_cache:
+    cmd:
+      - python memorization_kfac/data/prepare_pile10k_cache.py --output ${out_dir.prepare_pile10k_cache}
+    deps:
+      - memorization_kfac/data/prepare_pile10k_cache.py
+      - ${out_dir.prepare_pile10k}
+    outs:
+      - ${out_dir.prepare_pile10k_cache}
+    desc: |
+      Generate pre-tokenized cache for pile10k perplexity evaluation.
+      Creates a .pt file with tokenized pile10k data in blocks of size 112.
+      This is used for BSN-style perplexity evaluation.
+
+  # =============================================================================
+  # K-FAC Factor Collection
+  # =============================================================================
+  # Unified task using Hydra config groups for model and method selection.
+  #
+  # Usage:
+  #   dvc exp run collect_kfac -S model=7b -S method=bergson
+  #   dvc exp run collect_kfac -S model=1b -S method=original
+  #   dvc exp run --queue -S 'model=1b,7b' -S 'method=original,bergson'
+
+  collect_kfac:
+    cmd: >-
+      python ${collect_kfac.script}
+      --model ${model.name}
+      --save_dir ${out_dir.collect_kfac}
+      ${collect_kfac.args}
+      ${computed.sample_labels_flag}
+      ${computed.fsdp_flag}
+      ${computed.world_size_flag}
+    deps:
+      - ${collect_kfac.script}
+      - ${collect_kfac.extra_dep}
+    outs:
+      - ${out_dir.collect_kfac}
+    desc: |
+      Collect K-FAC factors for the specified model and method.
+
+      Config groups (in conf/):
+      - model: 1b, 7b (sets model name, target layers, batch size)
+      - method: original, bergson (sets collection script and output dirs)
+
+      Usage:
+        dvc exp run collect_kfac -S model=7b -S method=bergson
+
+  # =============================================================================
+  # Baseline Prediction Cache (for nDCG evaluation)
+  # =============================================================================
+  # Generates baseline top-k predictions from the unmodified model.
+  # This must be computed BEFORE any model edits to ensure correct nDCG scores.
+  #
+  # Usage:
+  #   dvc exp run baseline_cache -S model=7b
+
+  baseline_cache:
+    cmd: >-
+      MEM_KFAC_CACHE_DIR=${out_dir.baseline_cache}/cache
+      MEM_EVAL_PT_CACHE=${out_dir.prepare_pile10k_cache}
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size ${model.size}
+      --results-tag baseline_${model.size}
+      --results-dir metrics_${out_dir.baseline_cache}
+      --only-baseline
+      --baseline ${out_dir.baseline_cache}
+      --perplexity
+      --bs ${eval_kfac.args.bs}
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/metrics/
+      - memorization_kfac/data/baseline_generator.py
+      - ${out_dir.prepare_pile10k}
+      - ${out_dir.prepare_pile10k_cache}
+    outs:
+      - ${out_dir.baseline_cache}
+    metrics:
+      - metrics_${out_dir.baseline_cache}/baseline_eval_log_${model.size}_baseline_${model.size}.jsonl
+    desc: |
+      Evaluate baseline metrics on the unmodified model.
+
+      This generates:
+      - Memorization metrics (Dolma & Quotes datasets)
+      - Perplexity (Pile 10k)
+      - nDCG@10 baseline predictions cache
+
+      The baseline cache is used for nDCG evaluation to compare edited models
+      against the original model's predictions. Must be run before
+      applying any K-FAC edits to ensure accurate comparison.
+
+      Usage:
+        dvc exp run baseline_cache -S model=7b
+
+  # =============================================================================
+  # K-FAC Weight Editing & Evaluation
+  # =============================================================================
+  # Unified task for applying K-FAC edits and evaluating memorization.
+  #
+  # Usage:
+  #   dvc exp run eval_kfac -S model=7b -S method=bergson
+  #   dvc exp run eval_kfac -S model=1b -S method=original
+
+  eval_kfac:
+    cmd: >-
+      MEM_KFAC_FACTORS_ROOT=${out_dir.collect_kfac}
+      MEM_KFAC_CACHE_DIR=${out_dir.eval_kfac}/cache
+      MEM_EVAL_PT_CACHE=${out_dir.prepare_pile10k_cache}
+      MEM_EVAL_EDITED_ROOT=${out_dir.eval_kfac}/model
+      python memorization_kfac/evaluations/eval_mem_kfac.py
+      --model-size ${model.size}
+      --results-tag ${model.size}
+      --results-dir metrics_${out_dir.eval_kfac}
+      --use-cache --refresh-cache --perplexity
+      --skip-baseline
+      --baseline ${out_dir.baseline_cache}
+      ${eval_kfac.args}
+      ${computed.eigenvalue_corrections_flag}
+      ${computed.weight_coefficients_flag}
+    deps:
+      - memorization_kfac/evaluations/eval_mem_kfac.py
+      - memorization_kfac/metrics/
+      - memorization_kfac/kfac_treatment_pairwise.py
+      - ${out_dir.collect_kfac}
+      - ${out_dir.prepare_pile10k}
+      - ${out_dir.prepare_pile10k_cache}
+      - ${out_dir.baseline_cache}
+    outs:
+      - ${out_dir.eval_kfac}
+    metrics:
+      - metrics_${out_dir.eval_kfac}/kfac_eval_log_${model.size}_${model.size}.jsonl
+    desc: |
+      Apply K-FAC weight editing and evaluate memorization.
+
+      Config groups (in conf/):
+      - model: 1b, 7b (sets model size, target layers config)
+      - method: original, bergson (sets factors dir, cache dir, metrics dir)
+
+      Usage:
+        dvc exp run eval_kfac -S model=7b -S method=bergson
+
+      Evaluates:
+      - Memorization (Dolma & Quotes datasets)
+      - Perplexity (Pile 10k)
+      - nDCG@10
+
+  # =============================================================================
+  # Figure 2: K-FAC Eigenvector Activation Ratios
+  # =============================================================================
+
+  plot_figure2:
+    cmd: >-
+      python memorization_kfac/evaluations/plot_figure2_activation_ratios.py
+      --model-size ${model.size}
+      --kfac-dir ${out_dir.collect_kfac}
+      --projection up
+      --n-samples 100
+      --batch-size 8
+      --output-dir plots_${out_dir.plot_figure2}
+    deps:
+      - memorization_kfac/evaluations/plot_figure2_activation_ratios.py
+      - ${out_dir.collect_kfac}
+    plots:
+      - plots_${out_dir.plot_figure2}
+    desc: |
+      Generate Figure 2: K-FAC eigenvector activation ratios.
+
+      Usage:
+        dvc exp run plot_figure2 -S model=7b -S method=original
+
+  # =============================================================================
+  # Benchmark Evaluation (using olmes)
+  # =============================================================================
+
+  benchmark:
+    cmd: >-
+      PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      uvx --python 3.11 --from "ai2-olmes[gpu] @ git+https://github.com/allenai/olmes.git@${olmes_commit}"
+      olmes
+      --model ${out_dir.eval_kfac}/model
+      ${benchmark.args}
+      --output-dir ${out_dir.benchmark}/${benchmark.args.task}
+      && python memorization_kfac/evaluations/extract_olmes_metrics.py ${out_dir.benchmark}/${benchmark.args.task}/metrics.json metrics_${out_dir.benchmark}/${benchmark.args.task}.json
+    deps:
+      - ${out_dir.eval_kfac}
+    outs:
+      - ${out_dir.benchmark}/${benchmark.args.task}
+    metrics:
+      - metrics_${out_dir.benchmark}/${benchmark.args.task}.json
+    desc: |
+      Run benchmark evaluation on edited model using OLMES with vLLM support.
+
+      Supported tasks:
+      - gsm8k::olmes - Grade school math (8-shot)
+      - winogrande::olmes - Commonsense reasoning
+
+      Uses the edited model generated by eval_kfac stage.
+
+      Uses uvx to run olmes in an isolated environment, avoiding dependency
+      conflicts with the main project (olmes requires fsspec==2023.5.0,
+      which conflicts with dvc). Includes [gpu] extras for vLLM acceleration.
+
+      Output: metrics.json contains primary_score and detailed metrics (acc_raw, etc.)
+      View with: dvc metrics show

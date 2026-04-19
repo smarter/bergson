@@ -1,0 +1,767 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+eval_mem_kfac.py
+
+Applies K-FAC compression to specified layers and runs evaluations.
+Supports both 1B and 7B models via --model-size flag.
+"""
+
+import contextlib
+import io
+import json
+import os
+import sys
+import time
+import argparse
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import torch
+from safetensors import safe_open
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers.utils import logging as hf_logging
+from torch.utils.data import DataLoader
+
+# Add repository root to path
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
+
+# Import KFAC treatment and evaluator
+from kfac_treatment_pairwise import KFACTreatmentPairwise
+from metrics.memorization_evaluator import MemorizationEvaluator, MODEL_CONFIGS
+from data import paths as DATA_PATHS
+
+# --- NEW: import the reusable Position Perturbations helper ---
+from metrics.position_perturb_eval import (
+    PositionPerturbationConfig,
+    run_pp_on_fixed_ids_tensors,
+    run_pp_flat_batched_fixed_ids,
+    debug_compare_runners_on_slice
+)
+from metrics.perplexity import perplexity
+
+# ─────────────────────────────────────────────────────────────────
+# Model-specific K-FAC factor paths
+# ─────────────────────────────────────────────────────────────────
+
+# Base directories for K-FAC factors and cache (override via environment)
+DEFAULT_FACTORS_ROOT = Path(
+    os.environ.get("MEM_KFAC_FACTORS_ROOT", REPO_ROOT / "assets" / "kfac_factors")
+)
+CACHE_DIR = Path(
+    os.environ.get("MEM_KFAC_CACHE_DIR", REPO_ROOT / "cache" / "kfac_weights")
+)
+
+# 1B model K-FAC factors (relative to DEFAULT_FACTORS_ROOT)
+KFAC_FACTORS_1B = {
+    # Paper reproduction (Table 5): layers 13-15 (checked first for priority)
+    (13, 14, 15): Path("olmo2_1b/kfac_factors_blk_13_14_15.pt"),
+    # Legacy/development factors
+    (0, 2, 14): Path("olmo2_1b/kfac_out_olmo2_1b_0_2_14/kfac_factors_blk_0_2_14.pt"),
+    (1, 15): Path("olmo2_1b/kfac_out_olmo2_1b_1_15/kfac_factors_blk_1_15.pt"),
+    (3, 4, 5): Path("olmo2_1b/kfac_out_olmo2_1b_3_4_5/kfac_factors_blk_3_4_5.pt"),
+    (6, 7, 8, 9): Path("olmo2_1b/kfac_out_olmo2_1b_6_7_8_9/kfac_factors_blk_6_7_8_9.pt"),
+    (10, 11, 12, 13): Path("olmo2_1b/kfac_out_olmo2_1b_10_11_12_13/kfac_factors_blk_10_11_12_13.pt"),
+}
+
+# 7B model K-FAC factors (relative paths)
+KFAC_FACTORS_7B = {
+    # Paper reproduction (Table 1): layers 23-25 (checked first for priority)
+    (23, 24, 25): Path("olmo2_7b/kfac_factors_blk_23_24_25.pt"),
+    # Legacy/development factors
+    (0, 1, 3, 7): Path("olmo2_7b/kfac_out_olmo2_7b_0_1_3_7/kfac_factors_blk_0_1_3_7.pt"),
+    (4, 12, 20, 28): Path("olmo2_7b/kfac_out_olmo2_7b_4_12_20_28/kfac_factors_blk_4_12_20_28.pt"),
+    (8, 9, 24, 25): Path("olmo2_7b/kfac_out_olmo2_7b_8_9_24_25/kfac_factors_blk_8_9_24_25.pt"),
+    (11, 15, 16, 17): Path("olmo2_7b/kfac_out_olmo2_7b_11_15_16_17/kfac_factors_blk_11_15_16_17.pt"),
+    (19, 23, 27, 31): Path("olmo2_7b/kfac_out_olmo2_7b_19_23_27_31/kfac_factors_blk_19_23_27_31.pt"),
+    (2, 6, 10, 14): Path("olmo2_7b/kfac_out_olmo2_7b_2_6_10_14/kfac_factors_blk_2_6_10_14.pt"),
+    (5, 21, 29, 13): Path("olmo2_7b/kfac_out_olmo2_7b_2_6_10_14/kfac_factors_blk_5_21_29_13.pt"),
+    (18, 22, 26, 30): Path("olmo2_7b/kfac_out_olmo2_7b_2_6_10_14/kfac_factors_blk_18_22_26_30.pt"),
+}
+
+
+def get_kfac_factors_path(model_size: str, layer_idx: int, factors_root: Optional[Path] = None) -> str:
+    """Get K-FAC factors path for given model size and layer.
+
+    Args:
+        model_size: "1b" or "7b"
+        layer_idx: Layer index to find factors for
+        factors_root: If provided, look for kfac_factors_blk_*.pt directly in this directory
+                      (DVC output format). Otherwise use DEFAULT_FACTORS_ROOT with legacy paths.
+    """
+    factors = KFAC_FACTORS_1B if model_size == "1b" else KFAC_FACTORS_7B
+    for layers, rel_path in factors.items():
+        if layer_idx in layers:
+            if factors_root is not None:
+                # DVC output format: factors directly in the root directory
+                return str((factors_root / rel_path.name).resolve())
+            else:
+                # Legacy format with olmo2_* subdirectory
+                return str((DEFAULT_FACTORS_ROOT / rel_path).resolve())
+    raise ValueError(f"No K-FAC factors for layer {layer_idx} in {model_size} model")
+
+
+def load_model_and_tokenizer(model_name: str, dtype: str = "bfloat16", quiet: bool = True):
+    """Load model and tokenizer."""
+    torch_dtype = {
+        "float32": torch.float32,
+        "float16": torch.float16,
+        "bfloat16": torch.bfloat16,
+    }[dtype]
+
+    if quiet:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            tok = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            if tok.pad_token is None:
+                tok.pad_token = tok.eos_token
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch_dtype,
+                device_map="auto",
+                trust_remote_code=True,
+            )
+    else:
+        tok = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch_dtype,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+
+    model.eval()
+    return model, tok
+
+
+def _sanitize_filename_component(text: str) -> str:
+    return ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in text)
+
+
+def _rho_to_str(rho: float) -> str:
+    return f"{rho:.3f}".replace('.', 'p')
+
+
+def _build_ptcache_perplexity_loader(tokenizer, clean_pt_path: str, block_size: int, batch_size: int) -> DataLoader:
+    """Build perplexity dataloader from a pre-tokenized pt cache (BSN-style)."""
+    pad_id = tokenizer.pad_token_id
+    raw = torch.load(clean_pt_path, map_location="cpu")
+    # Conform to [*, block_size]
+    if raw.dim() == 1:
+        n = (raw.numel() // block_size) * block_size
+        raw = raw[:n].view(-1, block_size)
+    elif raw.dim() == 2 and raw.size(1) != block_size:
+        L = raw.size(1)
+        if L > block_size:
+            raw = raw[:, :block_size]
+        else:
+            pad = torch.full((raw.size(0), block_size - L), pad_id, dtype=raw.dtype)
+            raw = torch.cat([raw, pad], dim=1)
+    mid = max(raw.size(0) // 2, 1)
+    perp_tensor = raw[:mid]
+    return DataLoader(perp_tensor, batch_size=96, shuffle=False)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Bergson format support
+# ─────────────────────────────────────────────────────────────────
+
+def _load_bergson_sharded(path: Path) -> Dict[str, torch.Tensor]:
+    """Load sharded safetensors from bergson format, concatenating shards."""
+    shard_files = sorted(path.glob("shard_*.safetensors"))
+    if not shard_files:
+        raise FileNotFoundError(f"No shards found in {path}")
+
+    if len(shard_files) == 1:
+        with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+            return {key: f.get_tensor(key) for key in f.keys()}
+
+    # Multiple shards - concatenate along dim=0 (rows)
+    with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+        keys = list(f.keys())
+
+    result = {}
+    for key in keys:
+        shards = []
+        for shard_file in shard_files:
+            with safe_open(shard_file, framework="pt", device="cpu") as f:
+                shards.append(f.get_tensor(key))
+        result[key] = torch.cat(shards, dim=0)
+    return result
+
+
+def _normalize_bergson_keys(data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    """Normalize bergson keys by removing checkpoint wrapper module names.
+
+    Gradient checkpointing wraps modules, causing names like:
+        layers.23._checkpoint_wrapped_module.mlp.up_proj
+    This normalizes them to:
+        layers.23.mlp.up_proj
+    """
+    return {k.replace("._checkpoint_wrapped_module.", "."): v for k, v in data.items()}
+
+
+def load_bergson_kfac_info(
+    bergson_path: str,
+    layer_names: List[str],
+    model,
+    device: Optional[str] = None,
+    keep_on_cpu: bool = False,
+    use_eigenvalue_corrections: bool = False,
+) -> Dict[str, Dict]:
+    """
+    Load K-FAC info from bergson format with pre-computed eigenvectors.
+
+    This avoids the need for convert_bergson_to_original.py by directly loading
+    the eigenvectors and computing eigenvalues from the covariance matrices.
+
+    Args:
+        bergson_path: Path to bergson output directory (containing influence_results/)
+        layer_names: List of layer names (e.g., ['model.layers.31.mlp.up_proj'])
+        model: The PyTorch model (used to get original weights)
+        device: Device to use for computations
+        keep_on_cpu: If True, keep eigenvectors on CPU
+        use_eigenvalue_corrections: If True, load pre-computed eigenvalue corrections
+
+    Returns:
+        Dict mapping layer_name -> {W_orig, eva_A, evc_A, eva_G, evc_G, lambda_correction (optional)}
+    """
+    bergson_path = Path(bergson_path)
+    influence_path = bergson_path / "influence_results"
+    device = device or next(model.parameters()).device
+
+    # Load eigenvectors (normalize keys to handle gradient checkpointing)
+    act_eigen = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "activation_eigen_sharded"))
+    grad_eigen = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "gradient_eigen_sharded"))
+
+    # Load covariances to compute eigenvalues
+    act_cov = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "activation_covariance_sharded"))
+    grad_cov = _normalize_bergson_keys(_load_bergson_sharded(influence_path / "gradient_covariance_sharded"))
+
+    # Load total_processed for normalization
+    total_processed_path = influence_path / "total_processed_covariances.pt"
+    total_processed = torch.load(total_processed_path, map_location="cpu").item()
+
+    # Optionally load eigenvalue corrections
+    lambda_corrections = None
+    total_processed_lambda = None
+    if use_eigenvalue_corrections:
+        lambda_path = influence_path / "eigenvalue_correction_sharded"
+        if not lambda_path.exists():
+            raise FileNotFoundError(f"Eigenvalue corrections not found at {lambda_path}")
+        lambda_corrections = _normalize_bergson_keys(_load_bergson_sharded(lambda_path))
+        # Load normalization constant for eigenvalue corrections
+        lambda_total_path = influence_path / "total_processed_lambda_correction.pt"
+        if not lambda_total_path.exists():
+            raise FileNotFoundError(f"Eigenvalue corrections total processed not found at {lambda_total_path}")
+        total_processed_lambda = torch.load(lambda_total_path, map_location="cpu").item()
+        assert total_processed == total_processed_lambda, "Inconsistency: {total_processed} != {total_processed_lambda}"
+
+    kfac_info = {}
+    for layer_name in layer_names:
+        # Convert layer_name to bergson key format
+        # model.layers.14.mlp.gate_proj -> layers.14.mlp.gate_proj
+        bergson_key = layer_name.removeprefix("model.")
+
+        if bergson_key not in act_eigen:
+            raise ValueError(f"Eigenvectors not found for {bergson_key} in bergson factors")
+
+        # Get original weight
+        parts = layer_name.split('.')
+        layer = model
+        for part in parts:
+            layer = getattr(layer, part)
+        W_orig = layer.weight.data.detach().clone()
+
+        compute_device = "cpu" if keep_on_cpu else device
+
+        # Load eigenvectors (note: eigh returns ascending order, we need descending)
+        evc_A = act_eigen[bergson_key].float().to(compute_device)
+        evc_G = grad_eigen[bergson_key].float().to(compute_device)
+
+        # Normalize and symmetrize covariances
+        cov_A = act_cov[bergson_key].float().to(compute_device) / total_processed
+        cov_A = (cov_A + cov_A.T) / 2
+        cov_G = grad_cov[bergson_key].float().to(compute_device) / total_processed
+        cov_G = (cov_G + cov_G.T) / 2
+
+        # Compute eigenvalues: lambda_i = v_i^T @ C @ v_i
+        eva_A = (evc_A.T @ cov_A @ evc_A).diagonal()
+        eva_G = (evc_G.T @ cov_G @ evc_G).diagonal()
+
+        # Sort in descending order (bergson stores in ascending from eigh)
+        idx_A = eva_A.argsort(descending=True)
+        eva_A = eva_A[idx_A]
+        evc_A = evc_A[:, idx_A]
+
+        idx_G = eva_G.argsort(descending=True)
+        eva_G = eva_G[idx_G]
+        evc_G = evc_G[:, idx_G]
+
+        # Verify dimensions
+        out_features, in_features = W_orig.shape
+        assert evc_G.shape[0] == out_features, \
+            f"G eigenvectors shape {evc_G.shape} doesn't match output dim {out_features}"
+        assert evc_A.shape[0] == in_features, \
+            f"A eigenvectors shape {evc_A.shape} doesn't match input dim {in_features}"
+
+        print(f"{layer_name}: W{tuple(W_orig.shape)}, G{tuple(cov_G.shape)}, A{tuple(cov_A.shape)}")
+
+        layer_info = {
+            'W_orig': W_orig,
+            'eva_A': eva_A,
+            'evc_A': evc_A,
+            'eva_G': eva_G,
+            'evc_G': evc_G,
+        }
+
+        if lambda_corrections is not None and bergson_key in lambda_corrections:
+            # Eigenvalue corrections are stored in bergson's original order (ascending from eigh)
+            # We need to reorder to match our descending eigenvector order
+            lambda_corr = lambda_corrections[bergson_key].float().to(compute_device)
+            # Normalize by total processed
+            lambda_corr = lambda_corr / total_processed
+            # Reorder: lambda_corr[old_i, old_j] -> lambda_corr_new[new_i, new_j]
+            # where new indices come from sorting eigenvalues descending
+            lambda_corr = lambda_corr[idx_G][:, idx_A]
+            layer_info['lambda_correction'] = lambda_corr
+            print(f"  Loaded eigenvalue corrections: {tuple(layer_info['lambda_correction'].shape)}")
+
+        kfac_info[layer_name] = layer_info
+
+    return kfac_info
+
+
+def apply_kfac_to_layer(model,
+                       layer_idx: int,
+                       model_name: str,
+                       variance_gate: float,
+                       variance_up: float,
+                       variance_down: float,
+                       model_size: Optional[str] = None,
+                       bergson_path: Optional[str] = None,
+                       goodfire_path: Optional[str] = None,
+                       use_cache: bool = True,
+                       refresh_cache: bool = False,
+                       use_eigenvalue_corrections: bool = False,
+                       use_weight_coefficients: bool = False) -> None:
+    """Apply K-FAC to a single layer's MLP projections.
+
+    Args:
+        model: The model to apply K-FAC to
+        layer_idx: Layer index
+        model_name: Model name (for cache key)
+        variance_gate/up/down: Variance ratios for each projection
+        model_size: Model size for looking up pre-converted factors (mutually exclusive with bergson_path)
+        bergson_path: Path to bergson output directory (mutually exclusive with model_size/goodfire_path)
+        goodfire_path: Path to goodfire output directory with kfac_factors_blk_*.pt files
+        use_cache: Whether to use cached weights
+        refresh_cache: Whether to recompute cached weights
+        use_eigenvalue_corrections: Whether to use pre-computed eigenvalue corrections (bergson only)
+        use_weight_coefficients: Whether to weight pair importance by C_ij^2 (squared weight coefficients)
+    """
+    if bergson_path is None and model_size is None:
+        raise ValueError("Either model_size or bergson_path must be provided")
+
+    layer = model.model.layers[layer_idx]
+    projections = [
+        ("up", layer.mlp.up_proj, variance_up),
+        ("down", layer.mlp.down_proj, variance_down),
+        ("gate", layer.mlp.gate_proj, variance_gate),
+    ]
+
+    for proj_name, proj_layer, variance in projections:
+        if variance >= 0.9999:
+            print(f"  K-FAC {proj_name}_proj (ρ={variance:.3f}): skipping (ρ≈1.0)")
+            continue
+
+        cache_path = CACHE_DIR / (
+            f"{_sanitize_filename_component(model_name)}__L{layer_idx}__{proj_name}"
+            f"__rho{_rho_to_str(variance)}"
+            f"{'__evcorr' if use_eigenvalue_corrections else ''}"
+            f"{'__wcoef' if use_weight_coefficients else ''}"
+            f"__{proj_layer.weight.dtype.__str__()}.pt"
+        )
+
+        # Check cache
+        if use_cache and not refresh_cache and cache_path.exists():
+            with torch.no_grad():
+                cached = torch.load(cache_path, map_location=proj_layer.weight.device)
+                proj_layer.weight.copy_(cached.to(dtype=proj_layer.weight.dtype, device=proj_layer.weight.device))
+            print(f"  K-FAC {proj_name}_proj (ρ={variance:.3f}): loaded from cache")
+            continue
+
+        # Build KFACTreatmentPairwise with appropriate factors
+        layer_name = f'model.layers.{layer_idx}.mlp.{proj_name}_proj'
+        if bergson_path:
+            kfac_info = load_bergson_kfac_info(
+                bergson_path=bergson_path,
+                layer_names=[layer_name],
+                model=model,
+                device=proj_layer.weight.device,
+                use_eigenvalue_corrections=use_eigenvalue_corrections,
+            )
+            kfac = KFACTreatmentPairwise(
+                model,
+                layer_names=[layer_name],
+                kfac_info=kfac_info,
+                device=proj_layer.weight.device,
+            )
+        else:
+            factors_root = Path(goodfire_path) if goodfire_path else None
+            factors_path = get_kfac_factors_path(model_size, layer_idx, factors_root=factors_root)
+            kfac = KFACTreatmentPairwise(
+                model,
+                layer_names=[layer_name],
+                kfac_factors_path=factors_path,
+                device=proj_layer.weight.device,
+            )
+
+        kfac.apply_kfac_by_product(variance_ratio=variance,
+                                   use_weight_coefficients=use_weight_coefficients)
+
+        stats = kfac.compression_stats.get(layer_name, None)
+        if stats is not None:
+            rG = stats.get('uniq_G', 0)
+            rA = stats.get('uniq_A', 0)
+            dim_G = stats.get('dim_G', 0)
+            dim_A = stats.get('dim_A', 0)
+            pct_G = (100.0 * rG / dim_G) if dim_G else 0.0
+            pct_A = (100.0 * rA / dim_A) if dim_A else 0.0
+            print(f"  retained eigenvectors: G={rG}/{dim_G} ({pct_G:.1f}%), A={rA}/{dim_A} ({pct_A:.1f}%)")
+        print(f"  K-FAC {proj_name}_proj (ρ={variance:.3f}): applied")
+
+        if use_cache:
+            os.makedirs(CACHE_DIR, exist_ok=True)
+            torch.save(proj_layer.weight.detach().cpu(), cache_path)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Apply K-FAC compression and evaluate.")
+
+    # Model selection
+    parser.add_argument("--model-size", type=str, choices=["1b", "7b"], required=True,
+                       help="Model size to use")
+
+    # Layer configuration
+    parser.add_argument("--layers-json", type=str, default="",
+                       help='JSON string mapping layer -> {gate, up, down}')
+    parser.add_argument("--layers-file", type=str, default="",
+                       help="Path to JSON file with layer configurations")
+    parser.add_argument("--order", type=str, default="",
+                       help="Comma-separated layer indices to apply in sequence")
+
+    # K-FAC settings
+    parser.add_argument("--use-cache", action="store_true",
+                       help="Use cached K-FAC weights if available")
+    parser.add_argument("--refresh-cache", action="store_true",
+                       help="Recompute and overwrite cached weights")
+    parser.add_argument("--bergson-factors", type=str, default="",
+                       help="Path to bergson output directory. If set, reads factors directly from "
+                            "bergson format (with pre-computed eigenvectors) instead of using "
+                            "pre-converted .pt files.")
+    parser.add_argument("--goodfire-factors", type=str, default="",
+                       help="Path to goodfire output directory containing kfac_factors_blk_*.pt files. "
+                            "Mutually exclusive with --bergson-factors.")
+    parser.add_argument("--eigenvalue-corrections", action="store_true",
+                       help="Use pre-computed eigenvalue corrections from bergson format. "
+                            "Only supported with --bergson-factors.")
+    parser.add_argument("--weight-coefficients", action="store_true",
+                       help="Weight pair importance by C_ij^2 (squared weight coefficients). "
+                            "Minimizes second-order loss impact rather than just curvature.")
+
+    # Evaluation settings
+    parser.add_argument("--dtype", type=str, choices=["float16", "bfloat16", "float32"],
+                       default="bfloat16", help="Model dtype")
+    parser.add_argument("--bs", type=int, default=32, help="Batch size")
+    parser.add_argument("--prefix", type=int, default=64, help="Prefix length")
+    parser.add_argument("--suffix", type=int, default=48, help="Suffix length")
+    parser.add_argument("--loose", type=float, default=0.75, help="Loose threshold")
+    parser.add_argument("--skip-baseline", action="store_true",
+                       help="Skip baseline evaluation")
+    parser.add_argument("--only-baseline", action="store_true",
+                       help="Only run baseline evaluation (no K-FAC), and save baseline metrics. "
+                            "When set, --baseline specifies the output directory for baseline predictions.")
+    parser.add_argument("--baseline", type=str, default=None,
+                       help="Path to precomputed baseline predictions (.i32 file or directory) for nDCG. "
+                            "When used with --only-baseline, this is the output directory for predictions.")
+    parser.add_argument("--perplexity", action="store_true",
+                       help="Compute perplexity using BSN pt_cache (pre and post)")
+    parser.add_argument("--verbose", action="store_true",
+                       help="Show detailed loading messages")
+    # Results outputs
+    parser.add_argument("--results-dir", type=str, default="", help="Override directory for results logs")
+    parser.add_argument("--results-tag", type=str, default="", help="Filename tag appended to results logs")
+
+    args = parser.parse_args()
+
+    # Validate argument combinations
+    if args.bergson_factors and args.goodfire_factors:
+        parser.error("--bergson-factors and --goodfire-factors are mutually exclusive")
+    if args.eigenvalue_corrections and not args.bergson_factors:
+        parser.error("--eigenvalue-corrections requires --bergson-factors")
+    if args.only_baseline and args.skip_baseline:
+        parser.error("--only-baseline and --skip-baseline are mutually exclusive")
+
+    # Suppress HF logging
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    os.environ.setdefault("HF_DATASETS_DISABLE_PROGRESS_BAR", "1")
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+    hf_logging.set_verbosity_error()
+    hf_logging.disable_progress_bar()
+
+    t0 = time.time()
+
+    # Load model configuration
+    config = MODEL_CONFIGS[args.model_size]
+    model_name = config["model_name"]
+
+    print(f"Loading {args.model_size} model: {model_name}")
+    model, tokenizer = load_model_and_tokenizer(model_name, dtype=args.dtype)
+
+    # Parse layer configuration
+    if args.layers_file:
+        with open(args.layers_file, "r") as f:
+            layer_map_raw = json.load(f)
+    elif args.layers_json:
+        layer_map_raw = json.loads(args.layers_json)
+    else:
+        layer_map_raw = {}
+
+    # Normalize to int keys
+    layer_to_variances = {}
+    for k_str, ratios in layer_map_raw.items():
+        li = int(k_str)
+        layer_to_variances[li] = {
+            "gate": float(ratios.get("gate", 1.0)),
+            "up": float(ratios.get("up", 1.0)),
+            "down": float(ratios.get("down", 1.0)),
+        }
+
+    # Determine layer order
+    if args.order.strip():
+        layer_order = [int(x) for x in args.order.split(',') if x.strip()]
+    else:
+        layer_order = list(layer_to_variances.keys())
+
+    # Optional BSN-style perplexity loader
+    perp_loader = None
+    if args.perplexity:
+        try:
+            perp_loader = _build_ptcache_perplexity_loader(
+                tokenizer,
+                clean_pt_path=DATA_PATHS.OLMO2_CLEAN_PT_CACHE_112,
+                block_size=112,
+                batch_size=args.bs,
+            )
+        except Exception as e:
+            print(f"[warn] Failed to build BSN perplexity loader: {e}")
+
+    # BASELINE EVALUATION
+    baseline_results = None
+    pre_ppl_bsn = None
+    if not args.skip_baseline or args.only_baseline:
+        print("\n" + "="*60)
+        print("BASELINE EVALUATION (before K-FAC)")
+        print("="*60)
+
+        evaluator = MemorizationEvaluator(model, tokenizer, args.model_size, verbose=args.verbose)
+        # When --only-baseline is set, use --baseline as the output directory for nDCG predictions
+        ndcg_baseline_output_dir = args.baseline if args.only_baseline else None
+        baseline_results = evaluator.run_all_evals(
+            prefix_len=args.prefix,
+            suffix_len=args.suffix,
+            batch_size=args.bs,
+            loose_threshold=args.loose,
+            include_perplexity=False,
+            include_clean_nonmem=True,
+            baseline_model=model,
+            ndcg_max_tokens=200000,
+            ndcg_baseline_output_dir=ndcg_baseline_output_dir,
+        )
+
+        if 'memorization' in baseline_results:
+            mem = baseline_results['memorization']
+            print(f"Memorization: strict_acc={mem['strict_acc']:.4f}, "
+                  f"loose_acc={mem['loose_acc']:.4f}, "
+                  f"avg_lev={mem['avg_levenshtein_norm']:.4f}")
+        print(f"nDCG@10: {baseline_results['ndcg']:.4f}")
+        if perp_loader is not None:
+            try:
+                pre_ppl_bsn = perplexity(perp_loader, model)
+                print(f"Perplexity (BSN clean set, pre): {pre_ppl_bsn:.4f}")
+            except Exception as e:
+                print(f"[warn] Perplexity (BSN, pre) failed: {e}")
+
+    # APPLY K-FAC (skipped when --only-baseline)
+    if not args.only_baseline and layer_order:
+        print("\n" + "="*60)
+        print(f"APPLYING K-FAC TO LAYERS: {layer_order}")
+        if args.bergson_factors:
+            print(f"Using bergson factors from: {args.bergson_factors}")
+        print("="*60)
+
+        for layer_idx in layer_order:
+            if layer_idx not in layer_to_variances:
+                raise ValueError(f"Layer {layer_idx} not in configuration")
+
+            variances = layer_to_variances[layer_idx]
+            print(f"\nLayer {layer_idx}:")
+
+            apply_kfac_to_layer(
+                model,
+                layer_idx,
+                model_name=model_name,
+                variance_gate=variances["gate"],
+                variance_up=variances["up"],
+                variance_down=variances["down"],
+                model_size=args.model_size if not args.bergson_factors else None,
+                bergson_path=args.bergson_factors or None,
+                goodfire_path=args.goodfire_factors or None,
+                use_cache=args.use_cache,
+                refresh_cache=args.refresh_cache,
+                use_eigenvalue_corrections=args.eigenvalue_corrections,
+                use_weight_coefficients=args.weight_coefficients,
+            )
+
+    # POST-K-FAC EVALUATION (skipped when --only-baseline)
+    post_ppl_bsn = None
+    if args.only_baseline:
+        # Use baseline results and skip post-K-FAC evaluation
+        results = baseline_results
+        evaluator = MemorizationEvaluator(model, tokenizer, args.model_size, verbose=args.verbose)
+        method = "baseline"
+        save_dir = None  # Don't save unmodified model
+    else:
+        print("\n" + "="*60)
+        print("POST-K-FAC EVALUATION")
+        print("="*60)
+
+        evaluator = MemorizationEvaluator(model, tokenizer, args.model_size, verbose=args.verbose)
+        results = evaluator.run_all_evals(
+            prefix_len=args.prefix,
+            suffix_len=args.suffix,
+            batch_size=args.bs,
+            loose_threshold=args.loose,
+            include_perplexity=False,
+            include_clean_nonmem=True,
+            baseline_model=None,
+            ndcg_max_tokens=200000,
+            ndcg_baseline_file=args.baseline,
+        )
+
+        if 'memorization' in results:
+            mem = results['memorization']
+            print(f"Memorization: strict_acc={mem['strict_acc']:.4f}, "
+                  f"loose_acc={mem['loose_acc']:.4f}, "
+                  f"avg_lev={mem['avg_levenshtein_norm']:.4f}")
+        print(f"nDCG@10: {results['ndcg']:.4f}")
+        if perp_loader is not None:
+            try:
+                post_ppl_bsn = perplexity(perp_loader, model)
+                print(f"Perplexity (BSN clean set, post): {post_ppl_bsn:.4f}")
+            except Exception as e:
+                print(f"[warn] Perplexity (BSN, post) failed: {e}")
+
+        method = "kfac"
+        # Save final edited model in HuggingFace format (for use with olmes benchmarks)
+        save_dir = str(DATA_PATHS.EDITED_MODELS_ROOT)
+        model.save_pretrained(save_dir)
+        tokenizer.save_pretrained(save_dir)
+        print(f"Saved edited model to: {save_dir}")
+
+    if not args.verbose:
+        print("\n" + "="*60)
+        print("RESULTS SUMMARY")
+        print("="*60)
+
+    if 'memorization' in results:
+        mem = results['memorization']
+        print(f"\nMemorization metrics:")
+        print(f"  Strict accuracy: {mem['strict_acc']:.4f}")
+        print(f"  Loose accuracy:  {mem['loose_acc']:.4f}")
+        print(f"  Avg Levenshtein: {mem['avg_levenshtein_norm']:.4f}")
+
+    if 'quotes' in results:
+        quotes = results['quotes']
+        print(f"\nQuotes metrics:")
+        print(f"  Strict accuracy: {quotes['strict_acc']:.4f}")
+        print(f"  Loose accuracy:  {quotes['loose_acc']:.4f}")
+        print(f"  Avg Levenshtein: {quotes['avg_levenshtein_norm']:.4f}")
+
+    if 'ndcg' in results:
+        print(f"\nnDCG@10: {results['ndcg']:.4f}")
+
+    evaluator.save_results(
+        results,
+        method=method,
+        layer_config=layer_to_variances,
+        output_dir=(args.results_dir or None),
+        filename_tag=(args.results_tag or None),
+        additional_info={
+            "elapsed_sec": round(time.time() - t0, 2),
+            "dtype": args.dtype,
+            "use_cache": args.use_cache,
+            "edited_model_path": save_dir,
+            # Persist BSN-style perplexities for centralized comparison
+            "kfac_perplexity_bsn_pre": float(pre_ppl_bsn) if pre_ppl_bsn is not None else None,
+            "kfac_perplexity_bsn_post": float(post_ppl_bsn) if post_ppl_bsn is not None else None,
+            "kfac_perplexity_block_size": 112,
+            "kfac_perplexity_pt_cache_path": DATA_PATHS.OLMO2_CLEAN_PT_CACHE_112,
+        }
+    )
+
+    # Additionally append a compact hits record (including quotes) for quick scans
+    try:
+        results_dir = args.results_dir if args.results_dir else os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+        os.makedirs(results_dir, exist_ok=True)
+        hits_path = os.path.join(results_dir, f"kfac_hits_{args.model_size}.jsonl")
+
+        hits_record = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "model_size": args.model_size,
+            "layers": layer_to_variances,
+            "kfac_ndcg@10": float(results.get("ndcg")) if ("ndcg" in results and results.get("ndcg") is not None) else None,
+        }
+
+        if 'memorization' in results and results['memorization']:
+            mem = results['memorization']
+            hits_record.update({
+                "kfac_mem_strict_acc": float(mem.get("strict_acc", 0.0)),
+                "kfac_mem_loose_acc": float(mem.get("loose_acc", 0.0)),
+            })
+
+        if 'quotes' in results and results['quotes']:
+            q = results['quotes']
+            hits_record.update({
+                "kfac_quotes_strict_acc": float(q.get("strict_acc", 0.0)),
+                "kfac_quotes_loose_acc": float(q.get("loose_acc", 0.0)),
+            })
+
+        # Add BSN-style perplexities if available
+        if 'pre_ppl_bsn' in locals() and pre_ppl_bsn is not None:
+            try:
+                hits_record["kfac_perplexity_bsn_pre"] = float(pre_ppl_bsn)
+            except Exception:
+                pass
+        if post_ppl_bsn is not None:
+            try:
+                hits_record["kfac_perplexity_bsn_post"] = float(post_ppl_bsn)
+            except Exception:
+                pass
+
+        with open(hits_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(hits_record, ensure_ascii=False) + "\n")
+    except Exception as _e_hits:
+        print(f"[warn] Failed to append kfac hits record: {_e_hits}")
+
+    print(f"\nTotal time: {time.time() - t0:.1f}s")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,7 @@
+[core]
+    remote = myremote
+[hydra]
+    enabled = true
+    config_dir = conf
+['remote "myremote"']
+    url = s3://gmartres-persona/dvcstore

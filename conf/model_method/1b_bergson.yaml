@@ -1,0 +1,7 @@
+# @package _global_
+model_method:
+  # Untuned
+  gate_up_mass: 0.40
+
+collect_kfac:
+  bf16_batch_size: 168

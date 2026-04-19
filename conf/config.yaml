@@ -1,0 +1,50 @@
+# Hydra configuration for K-FAC experiments
+# Usage:
+#   dvc exp run -S model=7b -S method=bergson
+#   dvc exp run --queue -S 'model=1b,7b' -S 'method=original,bergson'
+
+defaults:
+  - model: 7b # loads model/7b.yaml
+  - method: bergson
+  - benchmark: gsm8k
+  - model_method: ${model}_${method} # loads model_method/7b_bergson.yaml
+  - _self_
+
+collect_kfac:
+  sample_labels: true
+  args:
+    device: "cuda"
+    dtype: "bfloat16"
+    corpus: "dolmo"
+    nbytes: 100000000  # ~100MB (~20M tokens)
+    seq_len: 512
+    target_blocks: ${oc.dict.keys:model.layers}
+    layers_per_pass: ${len:${model.layers}}
+    batch_size: ${scale_for_dtype:${..bf16_batch_size},${.dtype}}
+
+eval_kfac:
+  use_weight_coefficients: false
+  args:
+    layers-json: ${json:${model.layers}}
+
+
+
+# Common output suffix and directories
+out_suffix: "${method.name}/${model.size}"
+out_dir:
+  prepare_pile10k: "memorization_kfac/data/pile10k_None.txt"
+  prepare_pile10k_cache: "out/prepare_pile10k_cache"
+  baseline_cache: "out/baseline_cache/${model.size}"
+  collect_kfac: "out/collect_kfac/${out_suffix}"
+  eval_kfac: "out/eval_kfac/${out_suffix}"
+  plot_figure2: "out/plot_figure2/${out_suffix}"
+  benchmark: "out/benchmark/${out_suffix}"
+
+computed:
+  # Flags that cannot be represented as "key: value" because they don't have a
+  # value (dvc expands "key: null" as "--key None").
+  eigenvalue_corrections_flag: "${if:${eval_kfac.use_eigenvalue_corrections},'--eigenvalue-corrections',''}"
+  weight_coefficients_flag: "${if:${eval_kfac.use_weight_coefficients},'--weight-coefficients',''}"
+  sample_labels_flag: "${if:${collect_kfac.sample_labels},'--sample_labels',''}"
+  fsdp_flag: "${if:${collect_kfac.fsdp},'--fsdp',''}"
+  world_size_flag: "${if_set:${collect_kfac.world_size},'--world_size'}"

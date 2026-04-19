@@ -1,0 +1,5 @@
+# @package _global_
+benchmark:
+  args:
+    task: "gsm8k::olmes"
+    batch-size: 28

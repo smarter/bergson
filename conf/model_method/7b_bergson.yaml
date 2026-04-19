@@ -1,0 +1,7 @@
+# @package _global_
+model_method:
+  # Tuned to approximately match 7b-goodfire wrt to the numbers of preserved eigenvalues with --eigenvalue-corrections
+  gate_up_mass: 0.40
+
+collect_kfac:
+  bf16_batch_size: 40

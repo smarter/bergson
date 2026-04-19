@@ -1,0 +1,169 @@
+#!/usr/bin/env python
+"""
+Convert bergson KFAC format to original memorization_kfac format.
+
+Handles:
+- Key name mapping: layers.N.mlp.gate_proj → blkN.gate
+- Normalization: raw sums → normalized by total_processed (valid positions)
+- Format conversion: safetensors → .pt
+"""
+import argparse
+import json
+import pathlib
+from safetensors import safe_open
+import torch
+
+
+def parse():
+    p = argparse.ArgumentParser(description="Convert bergson KFAC to original format")
+    p.add_argument(
+        "--bergson_dir",
+        type=pathlib.Path,
+        required=True,
+        help="Directory containing bergson output (activation_covariance_sharded/, gradient_covariance_sharded/, metadata.json)",
+    )
+    p.add_argument(
+        "--output_dir",
+        type=pathlib.Path,
+        required=True,
+        help="Directory to save converted .pt files",
+    )
+    return p.parse_args()
+
+
+def load_bergson_covariances(bergson_dir: pathlib.Path):
+    """Load covariances from bergson safetensors format.
+
+    Properly handles sharded covariances from distributed training by
+    concatenating row-sharded matrices along dim=0.
+    """
+    # Load activation covariances (A matrices)
+    A_dict = {}
+    act_cov_dir = bergson_dir / "influence_results" / "activation_covariance_sharded"
+    if act_cov_dir.exists():
+        shard_files = sorted(act_cov_dir.glob("shard_*.safetensors"))
+
+        if len(shard_files) == 1:
+            # Single shard - load directly
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    A_dict[key] = f.get_tensor(key)
+        else:
+            # Multiple shards - concatenate along dim=0 (rows)
+            # First, collect all keys
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+                keys = list(f.keys())
+
+            for key in keys:
+                shards = []
+                for shard_file in shard_files:
+                    with safe_open(shard_file, framework="pt", device="cpu") as f:
+                        shards.append(f.get_tensor(key))
+                A_dict[key] = torch.cat(shards, dim=0)
+
+    # Load gradient covariances (G matrices)
+    G_dict = {}
+    grad_cov_dir = bergson_dir / "influence_results" / "gradient_covariance_sharded"
+    if grad_cov_dir.exists():
+        shard_files = sorted(grad_cov_dir.glob("shard_*.safetensors"))
+
+        if len(shard_files) == 1:
+            # Single shard - load directly
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    G_dict[key] = f.get_tensor(key)
+        else:
+            # Multiple shards - concatenate along dim=0 (rows)
+            with safe_open(shard_files[0], framework="pt", device="cpu") as f:
+                keys = list(f.keys())
+
+            for key in keys:
+                shards = []
+                for shard_file in shard_files:
+                    with safe_open(shard_file, framework="pt", device="cpu") as f:
+                        shards.append(f.get_tensor(key))
+                G_dict[key] = torch.cat(shards, dim=0)
+
+    # Load metadata
+    metadata_path = bergson_dir / "metadata.json"
+    if metadata_path.exists():
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+    else:
+        raise FileNotFoundError(f"metadata.json not found in {bergson_dir}")
+
+    return A_dict, G_dict, metadata
+
+
+def convert_key_name(bergson_key: str) -> str:
+    """
+    Convert bergson key to original format.
+
+    Example:
+        layers.14.mlp.gate_proj → blk14.gate
+        layers.14.mlp.up_proj → blk14.up
+        layers.14.mlp.down_proj → blk14.down
+    """
+    # Parse: layers.N.mlp.X_proj
+    parts = bergson_key.split(".")
+    if len(parts) != 4 or parts[0] != "layers" or parts[2] != "mlp":
+        raise ValueError(f"Unexpected key format: {bergson_key}")
+
+    layer_num = parts[1]
+    proj_name = parts[3].replace("_proj", "")  # gate_proj → gate
+
+    return f"blk{layer_num}.{proj_name}"
+
+
+def convert_bergson_to_original(bergson_dir: pathlib.Path, output_dir: pathlib.Path):
+    """Convert bergson output to original format."""
+    print(f"Loading bergson output from {bergson_dir}")
+    A_dict, G_dict, metadata = load_bergson_covariances(bergson_dir)
+
+    # Read total_processed from the .pt file (saved by EkfacComputer._collector)
+    total_processed_path = bergson_dir / "influence_results" / "total_processed_covariances.pt"
+    total_processed = torch.load(total_processed_path, map_location="cpu").item()
+
+    blocks = metadata["blocks"]
+
+    print(f"Found {len(A_dict)} activation covariances")
+    print(f"Found {len(G_dict)} gradient covariances")
+    print(f"Total valid positions: {total_processed:,}")
+    print(f"Blocks: {blocks}")
+
+    # Combine all blocks into a single dictionary (matching original format)
+    combined_data = {}
+    for bergson_key in A_dict.keys():
+        original_key = convert_key_name(bergson_key)
+
+        # Normalize matrices by total_processed (valid positions only)
+        A_normalized = A_dict[bergson_key].float() / total_processed
+        G_normalized = G_dict[bergson_key].float() / total_processed
+
+        combined_data[original_key] = {
+            "A": A_normalized,
+            "G": G_normalized,
+            "n_tokens": total_processed,  # Store as n_tokens for compatibility
+        }
+
+    # Save single file with all blocks combined (matching eval_mem_kfac.py expectations)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create filename: kfac_factors_blk_23_24_25.pt for blocks [23, 24, 25]
+    blocks_str = "_".join(map(str, sorted(blocks)))
+    output_file = output_dir / f"kfac_factors_blk_{blocks_str}.pt"
+
+    torch.save(combined_data, output_file)
+    print(f"✓ Saved {output_file} ({len(combined_data)} projections)")
+    print(f"  Keys: {list(combined_data.keys())}")
+
+    print(f"\n✓ Conversion complete! Output saved to {output_dir}")
+
+
+def main():
+    args = parse()
+    convert_bergson_to_original(args.bergson_dir, args.output_dir)
+
+
+if __name__ == "__main__":
+    main()

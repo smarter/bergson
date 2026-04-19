@@ -1,0 +1,14 @@
+# @package _global_
+method:
+  name: "goodfire"
+
+collect_kfac:
+  script: "memorization_kfac/data/collect_kfac_multilayer.py"
+  extra_dep: ${collect_kfac.script} # dvc.yaml parsing fails if we use "null" as a dependency
+  fsdp: false
+  world_size: null
+
+eval_kfac:
+  use_eigenvalue_corrections: false
+  args:
+    goodfire-factors: ${out_dir.collect_kfac}
